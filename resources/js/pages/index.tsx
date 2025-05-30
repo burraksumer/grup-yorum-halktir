@@ -517,6 +517,25 @@ export default function Index({ minioPublicUrl }: PageProps) {
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold text-sm truncate">{currentTrack.title}</p>
                       <p className="text-xs text-muted-foreground">Grup Yorum</p>
+                      
+                      {/* Progress Bar moved here */}
+                      {currentTrack && (
+                        <div className="flex items-center gap-1 w-full mt-1">
+                          <span className="text-xs text-muted-foreground w-7 text-right">
+                            {formatTime(currentTime)}
+                          </span>
+                          <Slider
+                            value={[currentTime]}
+                            onValueChange={handleProgressChange}
+                            max={duration || 100}
+                            step={1}
+                            className="flex-1"
+                          />
+                          <span className="text-xs text-muted-foreground w-7">
+                            {formatTime(duration)}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </>
                 ) : (
@@ -531,27 +550,8 @@ export default function Index({ minioPublicUrl }: PageProps) {
                 )}
               </div>
 
-              {/* Progress Bar */}
-              {currentTrack && (
-                <div className="flex items-center gap-2 w-full">
-                  <span className="text-xs text-muted-foreground w-10 text-right">
-                    {formatTime(currentTime)}
-                  </span>
-                  <Slider
-                    value={[currentTime]}
-                    onValueChange={handleProgressChange}
-                    max={duration || 100}
-                    step={1}
-                    className="flex-1"
-                  />
-                  <span className="text-xs text-muted-foreground w-10">
-                    {formatTime(duration)}
-                  </span>
-                </div>
-              )}
-
               {/* Controls */}
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-center">
                 <div className="flex items-center gap-2">
                   <Button size="icon" variant="ghost" onClick={playPrevTrack} disabled={!currentTrack}>
                     <SkipBack className="h-4 w-4" />
@@ -568,18 +568,6 @@ export default function Index({ minioPublicUrl }: PageProps) {
                   <Button size="icon" variant="ghost" onClick={playNextTrack} disabled={!currentTrack}>
                     <SkipForward className="h-4 w-4" />
                   </Button>
-                </div>
-                
-                {/* Volume Control */}
-                <div className="flex items-center gap-2">
-                  <Volume2 className="h-4 w-4" />
-                  <Slider
-                    value={volume}
-                    onValueChange={handleVolumeChange}
-                    max={100}
-                    step={1}
-                    className="w-24"
-                  />
                 </div>
               </div>
             </div>
@@ -633,7 +621,7 @@ export default function Index({ minioPublicUrl }: PageProps) {
             <ResizablePanel defaultSize={35} minSize={25}>
               <div className="h-full p-4">
                 <h2 className="text-lg font-semibold mb-4">Albümler</h2>
-                <ScrollArea className="h-[calc(100vh-12rem)]">
+                <ScrollArea className="h-[calc(100vh-16rem)]">
                   <div className="grid gap-3 px-4">
                     {albumsData.albums.map((album) => (
                       <Card 
@@ -705,7 +693,7 @@ export default function Index({ minioPublicUrl }: PageProps) {
                     </div>
 
                     {/* Track List */}
-                    <ScrollArea className="h-[calc(100vh-16rem)]">
+                    <ScrollArea className="h-[calc(100vh-20rem)]">
                       <div className="space-y-1 px-4">
                         {selectedAlbum.tracks.map((track) => (
                           <div
@@ -801,8 +789,8 @@ export default function Index({ minioPublicUrl }: PageProps) {
                   <SkipForward className="h-4 w-4" />
                 </Button>
               </div>
-              
-              {/* Progress Bar */}
+
+              {/* Progress Bar - only for desktop */}
               {currentTrack && (
                 <div className="flex items-center gap-2 w-full max-w-md">
                   <span className="text-xs text-muted-foreground w-10 text-right">
