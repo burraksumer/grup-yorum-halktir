@@ -380,7 +380,7 @@ export default function Index({ minioPublicUrl }: PageProps) {
               <div className="h-full p-4">
                 <h2 className="text-lg font-semibold mb-4">Albümler</h2>
                 <ScrollArea className="h-[calc(100vh-12rem)]">
-                  <div className="grid gap-3">
+                  <div className="grid gap-3 px-4">
                     {albumsData.albums.map((album) => (
                       <Card 
                         key={album.id}
@@ -452,7 +452,7 @@ export default function Index({ minioPublicUrl }: PageProps) {
 
                     {/* Track List */}
                     <ScrollArea className="h-[calc(100vh-16rem)]">
-                      <div className="space-y-1">
+                      <div className="space-y-1 px-4">
                         {selectedAlbum.tracks.map((track) => (
                           <div
                             key={`${track.disc || 1}-${track.track}`}
