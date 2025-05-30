@@ -42,7 +42,14 @@ export default function Index({ minioPublicUrl }: PageProps) {
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [volume, setVolume] = useState([75])
+  const [volume, setVolume] = useState(() => {
+    // localStorage'dan volume'u oku, yoksa default 75 kullan
+    if (typeof window !== 'undefined') {
+      const savedVolume = localStorage.getItem('grup-yorum-volume')
+      return savedVolume ? [parseInt(savedVolume)] : [75]
+    }
+    return [75]
+  })
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [shouldAutoPlay, setShouldAutoPlay] = useState(false)
@@ -87,6 +94,13 @@ export default function Index({ minioPublicUrl }: PageProps) {
         console.log('✅ Setting new audio URL')
         audioRef.current.src = trackUrl
         
+        // Audio URL set edildiğinde volume'u da set et (audio kesinlikle hazır)
+        const linearVolume = volume[0] / 100
+        const curvedVolume = Math.pow(linearVolume, 2)
+        audioRef.current.volume = curvedVolume
+        audioRef.current.muted = false
+        console.log(`🔊 Volume set with URL: ${volume[0]}% -> ${(curvedVolume * 100).toFixed(1)}%`)
+        
         // Auto play ise çal
         if (shouldAutoPlay) {
           console.log('🚀 Auto-playing new track')
@@ -110,6 +124,14 @@ export default function Index({ minioPublicUrl }: PageProps) {
       }
     }
   }, [currentTrack, selectedAlbum, minioPublicUrl, shouldAutoPlay])
+
+  // Save volume to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('grup-yorum-volume', volume[0].toString())
+      console.log('💾 Volume saved to localStorage:', volume[0])
+    }
+  }, [volume])
 
   // Audio event listeners
   useEffect(() => {
@@ -170,18 +192,6 @@ export default function Index({ minioPublicUrl }: PageProps) {
       audio.removeEventListener('error', handleError)
     }
   }, [currentTrack, selectedAlbum])
-
-  // Update volume
-  useEffect(() => {
-    if (audioRef.current) {
-      // Linear 0-100'ü logaritmik curve'e çevir
-      const linearVolume = volume[0] / 100  // 0.0 - 1.0
-      const curvedVolume = Math.pow(linearVolume, 2)  // Squared curve - düşük seslerde daha hassas
-      audioRef.current.volume = curvedVolume
-      
-      console.log(`🔊 Volume: slider=${volume[0]}% -> actual=${(curvedVolume * 100).toFixed(1)}%`)
-    }
-  }, [volume])
 
   // Player functions
   const playNextTrack = useCallback(() => {
@@ -282,6 +292,27 @@ export default function Index({ minioPublicUrl }: PageProps) {
     const minutes = Math.floor(time / 60)
     const seconds = Math.floor(time % 60)
     return `${minutes}:${seconds.toString().padStart(2, '0')}`
+  }
+
+  const handleVolumeChange = (value: number[]) => {
+    console.log('🎛️ Volume slider changed to:', value[0])
+    
+    // Hemen audio volume'u güncelle
+    if (audioRef.current) {
+      const linearVolume = value[0] / 100
+      const curvedVolume = Math.pow(linearVolume, 2)
+      audioRef.current.volume = curvedVolume
+      
+      // Force unmute when user interacts with volume
+      if (audioRef.current.muted) {
+        audioRef.current.muted = false
+        console.log('🔊 Force unmuted on volume change')
+      }
+      
+      console.log(`🔊 Volume immediately set: ${value[0]}% -> ${(curvedVolume * 100).toFixed(1)}%`)
+    }
+    
+    setVolume(value)
   }
 
   if (!albumsData) {
@@ -505,7 +536,7 @@ export default function Index({ minioPublicUrl }: PageProps) {
               <Volume2 className="h-4 w-4" />
               <Slider
                 value={volume}
-                onValueChange={setVolume}
+                onValueChange={handleVolumeChange}
                 max={100}
                 step={1}
                 className="w-24"
