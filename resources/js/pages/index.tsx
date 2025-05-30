@@ -234,6 +234,21 @@ export default function Index({ minioPublicUrl }: PageProps) {
     }
   }, [playingAlbum, currentTrack])
 
+  // Yeni fonksiyonlar: İlk veya son şarkıda mıyız kontrolü
+  const isFirstTrack = useCallback(() => {
+    if (!playingAlbum || !currentTrack) return false
+    
+    const currentIndex = playingAlbum.tracks.findIndex(t => t.file === currentTrack.file)
+    return currentIndex === 0
+  }, [playingAlbum, currentTrack])
+
+  const isLastTrack = useCallback(() => {
+    if (!playingAlbum || !currentTrack) return false
+    
+    const currentIndex = playingAlbum.tracks.findIndex(t => t.file === currentTrack.file)
+    return currentIndex === playingAlbum.tracks.length - 1
+  }, [playingAlbum, currentTrack])
+
   // Handle track ended
   useEffect(() => {
     if (trackEnded) {
@@ -553,7 +568,7 @@ export default function Index({ minioPublicUrl }: PageProps) {
               {/* Controls */}
               <div className="flex items-center justify-center">
                 <div className="flex items-center gap-2">
-                  <Button size="icon" variant="ghost" onClick={playPrevTrack} disabled={!currentTrack}>
+                  <Button size="icon" variant="ghost" onClick={playPrevTrack} disabled={isFirstTrack()}>
                     <SkipBack className="h-4 w-4" />
                   </Button>
                   <Button size="icon" onClick={togglePlayPause} disabled={!currentTrack}>
@@ -565,7 +580,7 @@ export default function Index({ minioPublicUrl }: PageProps) {
                       <Play className="h-4 w-4" />
                     )}
                   </Button>
-                  <Button size="icon" variant="ghost" onClick={playNextTrack} disabled={!currentTrack}>
+                  <Button size="icon" variant="ghost" onClick={playNextTrack} disabled={isLastTrack()}>
                     <SkipForward className="h-4 w-4" />
                   </Button>
                 </div>
@@ -773,7 +788,7 @@ export default function Index({ minioPublicUrl }: PageProps) {
             <div className="flex flex-col items-center flex-1">
               {/* Controls */}
               <div className="flex items-center gap-2 mb-2">
-                <Button size="sm" variant="ghost" onClick={playPrevTrack} disabled={!currentTrack}>
+                <Button size="sm" variant="ghost" onClick={playPrevTrack} disabled={isFirstTrack()}>
                   <SkipBack className="h-4 w-4" />
                 </Button>
                 <Button size="sm" onClick={togglePlayPause} disabled={!currentTrack}>
@@ -785,7 +800,7 @@ export default function Index({ minioPublicUrl }: PageProps) {
                     <Play className="h-4 w-4" />
                   )}
                 </Button>
-                <Button size="sm" variant="ghost" onClick={playNextTrack} disabled={!currentTrack}>
+                <Button size="sm" variant="ghost" onClick={playNextTrack} disabled={isLastTrack()}>
                   <SkipForward className="h-4 w-4" />
                 </Button>
               </div>
