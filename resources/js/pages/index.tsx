@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Loader2 } from 'lucide-react'
+import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Loader2, Music } from 'lucide-react'
 
 interface Track {
   track: number
@@ -72,6 +72,8 @@ export default function Index({ minioPublicUrl }: PageProps) {
           if (firstAlbum.tracks.length > 0) {
             setCurrentTrack(firstAlbum.tracks[0])
           }
+          
+          console.log('🎵 Initial album and track set:', firstAlbum.title)
         }
       })
       .catch(error => console.error('Error loading albums:', error))
@@ -79,8 +81,15 @@ export default function Index({ minioPublicUrl }: PageProps) {
 
   // Audio URL'ini hazırla - currentTrack veya selectedAlbum değiştiğinde
   useEffect(() => {
-    if (currentTrack && selectedAlbum && audioRef.current && minioPublicUrl) {
-      const trackUrl = `${minioPublicUrl}/albums/${selectedAlbum.year}-${selectedAlbum.slug}/tracks/${currentTrack.file}`
+    if (currentTrack && audioRef.current && minioPublicUrl && albumsData) {
+      // CurrentTrack'in gerçek albümünü bul
+      const trackAlbum = albumsData.albums.find(album => 
+        album.tracks.some(track => track.file === currentTrack.file)
+      )
+      
+      if (!trackAlbum) return
+      
+      const trackUrl = `${minioPublicUrl}/albums/${trackAlbum.year}-${trackAlbum.slug}/tracks/${currentTrack.file}`
       
       console.log('🔗 Current audio src:', audioRef.current.src)
       console.log('🔗 New track URL:', trackUrl)
@@ -123,7 +132,7 @@ export default function Index({ minioPublicUrl }: PageProps) {
         }
       }
     }
-  }, [currentTrack, selectedAlbum, minioPublicUrl, shouldAutoPlay])
+  }, [currentTrack, minioPublicUrl, shouldAutoPlay, albumsData])
 
   // Save volume to localStorage
   useEffect(() => {
@@ -193,24 +202,34 @@ export default function Index({ minioPublicUrl }: PageProps) {
     }
   }, [currentTrack, selectedAlbum])
 
+  // Çalan albümü bul
+  const getPlayingAlbum = () => {
+    if (!currentTrack || !albumsData) return null
+    return albumsData.albums.find(album => 
+      album.tracks.some(track => track.file === currentTrack.file)
+    )
+  }
+
+  const playingAlbum = getPlayingAlbum()
+
   // Player functions
   const playNextTrack = useCallback(() => {
-    if (!selectedAlbum || !currentTrack) return
+    if (!playingAlbum || !currentTrack) return
     
-    const currentIndex = selectedAlbum.tracks.findIndex(t => t.file === currentTrack.file)
-    if (currentIndex < selectedAlbum.tracks.length - 1) {
-      handleTrackSelect(selectedAlbum.tracks[currentIndex + 1])
+    const currentIndex = playingAlbum.tracks.findIndex(t => t.file === currentTrack.file)
+    if (currentIndex < playingAlbum.tracks.length - 1) {
+      handleTrackSelect(playingAlbum.tracks[currentIndex + 1])
     }
-  }, [selectedAlbum, currentTrack])
+  }, [playingAlbum, currentTrack])
 
   const playPrevTrack = useCallback(() => {
-    if (!selectedAlbum || !currentTrack) return
+    if (!playingAlbum || !currentTrack) return
     
-    const currentIndex = selectedAlbum.tracks.findIndex(t => t.file === currentTrack.file)
+    const currentIndex = playingAlbum.tracks.findIndex(t => t.file === currentTrack.file)
     if (currentIndex > 0) {
-      handleTrackSelect(selectedAlbum.tracks[currentIndex - 1])
+      handleTrackSelect(playingAlbum.tracks[currentIndex - 1])
     }
-  }, [selectedAlbum, currentTrack])
+  }, [playingAlbum, currentTrack])
 
   // Handle track ended
   useEffect(() => {
@@ -221,28 +240,9 @@ export default function Index({ minioPublicUrl }: PageProps) {
   }, [trackEnded, playNextTrack])
 
   const handleAlbumSelect = (album: Album) => {
-    const wasPlaying = isPlaying
-    
-    // Önce albümü güncelle
+    // Sadece UI'da gösterilen albümü değiştir, çalan şarkıyı durdurma
     setSelectedAlbum(album)
-    
-    // Şu an çalan şarkı yeni albümde var mı kontrol et
-    const currentTrackExistsInNewAlbum = currentTrack && album.tracks.some(track => track.file === currentTrack.file)
-    
-    if (!currentTrackExistsInNewAlbum && album.tracks.length > 0) {
-      // Yeni albümün ilk şarkısını ayarla
-      const firstTrack = album.tracks[0]
-      setCurrentTrack(firstTrack)
-      
-      // Eğer çalıyorsa devam et
-      if (wasPlaying) {
-        setShouldAutoPlay(true)
-      }
-    }
-    // Eğer hiç şarkı yoksa ve yeni albümde şarkı varsa
-    else if (!currentTrack && album.tracks.length > 0) {
-      setCurrentTrack(album.tracks[0])
-    }
+    console.log('🎵 Album selected for viewing:', album.title)
   }
 
   const handleTrackSelect = (track: Track, autoPlay: boolean = true) => {
@@ -256,6 +256,17 @@ export default function Index({ minioPublicUrl }: PageProps) {
     }
     
     setCurrentTrack(track)
+    
+    // İlk defa bir şarkı seçiliyorsa, o şarkının albümünü göster
+    if (!currentTrack && albumsData) {
+      const trackAlbum = albumsData.albums.find(album => 
+        album.tracks.some(t => t.file === track.file)
+      )
+      if (trackAlbum) {
+        setSelectedAlbum(trackAlbum)
+        console.log('🎵 Initial album set:', trackAlbum.title)
+      }
+    }
     
     if (autoPlay) {
       console.log('🚀 Setting shouldAutoPlay to true')
@@ -333,11 +344,27 @@ export default function Index({ minioPublicUrl }: PageProps) {
         {/* Header */}
         <header className="border-b p-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold">Grup Yorum</h1>
-              <p className="text-muted-foreground">Halk Türküleri</p>
+            <div className="flex items-center gap-4">
+              <div>
+                <h1 className="text-2xl font-bold">Grup Yorum</h1>
+                <p className="text-muted-foreground">Halk Türküleri</p>
+              </div>
             </div>
+            
             <div className="flex items-center gap-2">
+              {/* Back to Playing Album Button - moved to right side */}
+              {playingAlbum && selectedAlbum?.id !== playingAlbum.id && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setSelectedAlbum(playingAlbum)}
+                  className="flex items-center gap-2 mr-3"
+                >
+                  <Music className="h-4 w-4" />
+                  <span className="hidden sm:inline">Çalan Albüm:</span>
+                  <span className="font-medium">{playingAlbum.title}</span>
+                </Button>
+              )}
               <span className="text-sm text-muted-foreground">
                 {albumsData.totalAlbums} Albüm • {albumsData.albums.reduce((acc, album) => acc + album.trackCount, 0)} Şarkı
               </span>
@@ -376,6 +403,16 @@ export default function Index({ minioPublicUrl }: PageProps) {
                                 {album.year} • {album.trackCount} şarkı
                               </p>
                             </div>
+                            {/* Playing Indicator */}
+                            {playingAlbum?.id === album.id && (
+                              <div className="flex items-center">
+                                {isPlaying ? (
+                                  <Music className="h-4 w-4 text-green-500 animate-pulse" />
+                                ) : (
+                                  <Music className="h-4 w-4 text-muted-foreground" />
+                                )}
+                              </div>
+                            )}
                           </div>
                         </CardContent>
                       </Card>
@@ -467,10 +504,10 @@ export default function Index({ minioPublicUrl }: PageProps) {
           <div className="flex items-center justify-between">
             {/* Currently Playing */}
             <div className="flex items-center gap-3 flex-1">
-              {currentTrack && selectedAlbum ? (
+              {currentTrack && playingAlbum ? (
                 <>
                   <Avatar className="h-12 w-12 rounded-md">
-                    <AvatarImage src={`${minioPublicUrl}/albums/${selectedAlbum.year}-${selectedAlbum.slug}/cover.jpg`} />
+                    <AvatarImage src={`${minioPublicUrl}/albums/${playingAlbum.year}-${playingAlbum.slug}/cover.jpg`} />
                     <AvatarFallback className="rounded-md">♪</AvatarFallback>
                   </Avatar>
                   <div className="min-w-0">
