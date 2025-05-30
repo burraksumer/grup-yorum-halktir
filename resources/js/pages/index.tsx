@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Loader2, Music } from 'lucide-react'
+import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Loader2, Music, List, Disc } from 'lucide-react'
+import { useIsMobile } from '@/hooks/use-mobile'
 
 interface Track {
   track: number
@@ -54,7 +55,9 @@ export default function Index({ minioPublicUrl }: PageProps) {
   const [duration, setDuration] = useState(0)
   const [shouldAutoPlay, setShouldAutoPlay] = useState(false)
   const [trackEnded, setTrackEnded] = useState(false)
+  const [mobileView, setMobileView] = useState<'albums' | 'tracks'>('albums')
   
+  const isMobile = useIsMobile()
   const audioRef = useRef<HTMLAudioElement>(null)
 
   // Load albums metadata
@@ -336,6 +339,257 @@ export default function Index({ minioPublicUrl }: PageProps) {
     )
   }
 
+  // Mobile Layout
+  if (isMobile) {
+    return (
+      <>
+        <Head title="Grup Yorum - Halk Türküleri" />
+        
+        <div className="h-screen flex flex-col bg-background">
+          {/* Header */}
+          <header className="border-b p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-xl font-bold">Grup Yorum</h1>
+                <p className="text-muted-foreground text-sm">Halk Türküleri</p>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                {playingAlbum && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => {
+                      setSelectedAlbum(playingAlbum)
+                      setMobileView('tracks')
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <Music className="h-4 w-4" />
+                    <span className="font-medium">Çalan Albüm</span>
+                  </Button>
+                )}
+              </div>
+            </div>
+          </header>
+
+          {/* Mobile Navigation */}
+          <div className="border-b grid grid-cols-2 divide-x">
+            <Button 
+              variant={mobileView === 'albums' ? 'default' : 'ghost'}
+              className="rounded-none h-12"
+              onClick={() => setMobileView('albums')}
+            >
+              <Disc className="h-4 w-4 mr-2" />
+              Albümler
+            </Button>
+            <Button 
+              variant={mobileView === 'tracks' ? 'default' : 'ghost'}
+              className="rounded-none h-12"
+              onClick={() => {
+                if (selectedAlbum) {
+                  setMobileView('tracks')
+                }
+              }}
+              disabled={!selectedAlbum}
+            >
+              <List className="h-4 w-4 mr-2" />
+              Şarkılar
+            </Button>
+          </div>
+
+          {/* Main Content */}
+          <div className="flex-1 overflow-auto">
+            {mobileView === 'albums' ? (
+              <div className="p-4">
+                <div className="grid gap-3">
+                  {albumsData.albums.map((album) => (
+                    <Card 
+                      key={album.id}
+                      className={`cursor-pointer transition-all hover:bg-accent ${
+                        selectedAlbum?.id === album.id ? 'bg-accent border-primary' : ''
+                      }`}
+                      onClick={() => {
+                        handleAlbumSelect(album)
+                        setMobileView('tracks')
+                      }}
+                    >
+                      <CardContent className="p-3">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-12 w-12 rounded-md">
+                            <AvatarImage src={`${minioPublicUrl}/albums/${album.year}-${album.slug}/cover.jpg`} />
+                            <AvatarFallback className="rounded-md">
+                              {album.year}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-sm truncate">{album.title}</h3>
+                            <p className="text-xs text-muted-foreground">
+                              {album.year} • {album.trackCount} şarkı
+                            </p>
+                          </div>
+                          {/* Playing Indicator */}
+                          {playingAlbum?.id === album.id && (
+                            <div className="flex items-center">
+                              {isPlaying ? (
+                                <Music className="h-4 w-4 text-green-500 animate-pulse" />
+                              ) : (
+                                <Music className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            ) : selectedAlbum ? (
+              <div className="p-4">
+                {/* Album Header */}
+                <div className="flex items-start gap-4 mb-4">
+                  <Avatar className="h-16 w-16 rounded-lg">
+                    <AvatarImage src={`${minioPublicUrl}/albums/${selectedAlbum.year}-${selectedAlbum.slug}/cover.jpg`} />
+                    <AvatarFallback className="rounded-lg text-lg">
+                      {selectedAlbum.year}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <h2 className="text-xl font-bold">{selectedAlbum.title}</h2>
+                    <p className="text-muted-foreground text-sm">
+                      {selectedAlbum.year} • {selectedAlbum.trackCount} şarkı
+                    </p>
+                  </div>
+                </div>
+
+                {/* Track List */}
+                <div className="space-y-1 px-2">
+                  {selectedAlbum.tracks.map((track) => (
+                    <div
+                      key={`${track.disc || 1}-${track.track}`}
+                      className={`flex items-center gap-3 p-3 rounded-md cursor-pointer hover:bg-accent transition-colors ${
+                        currentTrack?.file === track.file ? 'bg-accent' : ''
+                      }`}
+                      onClick={() => handleTrackSelect(track)}
+                    >
+                      <div className="w-8 text-center">
+                        {currentTrack?.file === track.file && isPlaying ? (
+                          <div className="w-4 h-4 bg-primary rounded-full mx-auto animate-pulse" />
+                        ) : currentTrack?.file === track.file && isLoading ? (
+                          <Loader2 className="w-4 h-4 mx-auto animate-spin" />
+                        ) : (
+                          <span className="text-sm text-muted-foreground">
+                            {track.track}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{track.title}</p>
+                        {track.disc && (
+                          <p className="text-xs text-muted-foreground">CD {track.disc}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-muted-foreground">Bir albüm seçin</p>
+              </div>
+            )}
+          </div>
+
+          {/* Player Bar */}
+          <footer className="border-t bg-card p-4">
+            {/* Audio Element */}
+            <audio ref={audioRef} preload="metadata" />
+            
+            <div className="flex flex-col gap-3">
+              {/* Currently Playing */}
+              <div className="flex items-center gap-3">
+                {currentTrack && playingAlbum ? (
+                  <>
+                    <Avatar className="h-12 w-12 rounded-md">
+                      <AvatarImage src={`${minioPublicUrl}/albums/${playingAlbum.year}-${playingAlbum.slug}/cover.jpg`} />
+                      <AvatarFallback className="rounded-md">♪</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-sm truncate">{currentTrack.title}</p>
+                      <p className="text-xs text-muted-foreground">Grup Yorum</p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-3 flex-1">
+                    <div className="h-12 w-12 rounded-md bg-muted flex items-center justify-center">
+                      <span className="text-muted-foreground">♪</span>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Şarkı seçin</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Progress Bar */}
+              {currentTrack && (
+                <div className="flex items-center gap-2 w-full">
+                  <span className="text-xs text-muted-foreground w-10 text-right">
+                    {formatTime(currentTime)}
+                  </span>
+                  <Slider
+                    value={[currentTime]}
+                    onValueChange={handleProgressChange}
+                    max={duration || 100}
+                    step={1}
+                    className="flex-1"
+                  />
+                  <span className="text-xs text-muted-foreground w-10">
+                    {formatTime(duration)}
+                  </span>
+                </div>
+              )}
+
+              {/* Controls */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Button size="icon" variant="ghost" onClick={playPrevTrack} disabled={!currentTrack}>
+                    <SkipBack className="h-4 w-4" />
+                  </Button>
+                  <Button size="icon" onClick={togglePlayPause} disabled={!currentTrack}>
+                    {isLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : isPlaying ? (
+                      <Pause className="h-4 w-4" />
+                    ) : (
+                      <Play className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button size="icon" variant="ghost" onClick={playNextTrack} disabled={!currentTrack}>
+                    <SkipForward className="h-4 w-4" />
+                  </Button>
+                </div>
+                
+                {/* Volume Control */}
+                <div className="flex items-center gap-2">
+                  <Volume2 className="h-4 w-4" />
+                  <Slider
+                    value={volume}
+                    onValueChange={handleVolumeChange}
+                    max={100}
+                    step={1}
+                    className="w-24"
+                  />
+                </div>
+              </div>
+            </div>
+          </footer>
+        </div>
+      </>
+    )
+  }
+
+  // Desktop Layout (unchanged)
   return (
     <>
       <Head title="Grup Yorum - Halk Türküleri" />
