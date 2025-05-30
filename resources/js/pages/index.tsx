@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Head } from '@inertiajs/react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
@@ -135,7 +135,7 @@ export default function Index({ minioPublicUrl }: PageProps) {
         }
       }
     }
-  }, [currentTrack, minioPublicUrl, shouldAutoPlay, albumsData])
+  }, [currentTrack, minioPublicUrl, shouldAutoPlay, albumsData, volume])
 
   // Save volume to localStorage
   useEffect(() => {
@@ -215,55 +215,13 @@ export default function Index({ minioPublicUrl }: PageProps) {
 
   const playingAlbum = getPlayingAlbum()
 
-  // Player functions
-  const playNextTrack = useCallback(() => {
-    if (!playingAlbum || !currentTrack) return
-    
-    const currentIndex = playingAlbum.tracks.findIndex(t => t.file === currentTrack.file)
-    if (currentIndex < playingAlbum.tracks.length - 1) {
-      handleTrackSelect(playingAlbum.tracks[currentIndex + 1])
-    }
-  }, [playingAlbum, currentTrack])
-
-  const playPrevTrack = useCallback(() => {
-    if (!playingAlbum || !currentTrack) return
-    
-    const currentIndex = playingAlbum.tracks.findIndex(t => t.file === currentTrack.file)
-    if (currentIndex > 0) {
-      handleTrackSelect(playingAlbum.tracks[currentIndex - 1])
-    }
-  }, [playingAlbum, currentTrack])
-
-  // Yeni fonksiyonlar: İlk veya son şarkıda mıyız kontrolü
-  const isFirstTrack = useCallback(() => {
-    if (!playingAlbum || !currentTrack) return false
-    
-    const currentIndex = playingAlbum.tracks.findIndex(t => t.file === currentTrack.file)
-    return currentIndex === 0
-  }, [playingAlbum, currentTrack])
-
-  const isLastTrack = useCallback(() => {
-    if (!playingAlbum || !currentTrack) return false
-    
-    const currentIndex = playingAlbum.tracks.findIndex(t => t.file === currentTrack.file)
-    return currentIndex === playingAlbum.tracks.length - 1
-  }, [playingAlbum, currentTrack])
-
-  // Handle track ended
-  useEffect(() => {
-    if (trackEnded) {
-      setTrackEnded(false) // Reset flag
-      playNextTrack()
-    }
-  }, [trackEnded, playNextTrack])
-
   const handleAlbumSelect = (album: Album) => {
     // Sadece UI'da gösterilen albümü değiştir, çalan şarkıyı durdurma
     setSelectedAlbum(album)
     console.log('🎵 Album selected for viewing:', album.title)
   }
 
-  const handleTrackSelect = (track: Track, autoPlay: boolean = true) => {
+  const handleTrackSelect = useCallback((track: Track, autoPlay: boolean = true) => {
     console.log('🎵 Track selected:', track.title, 'autoPlay:', autoPlay)
     console.log('🎵 Current track:', currentTrack?.title)
     
@@ -290,7 +248,49 @@ export default function Index({ minioPublicUrl }: PageProps) {
       console.log('🚀 Setting shouldAutoPlay to true')
       setShouldAutoPlay(true)
     }
-  }
+  }, [currentTrack, albumsData])
+
+  // Player functions
+  const playNextTrack = useCallback(() => {
+    if (!playingAlbum || !currentTrack) return
+    
+    const currentIndex = playingAlbum.tracks.findIndex(t => t.file === currentTrack.file)
+    if (currentIndex < playingAlbum.tracks.length - 1) {
+      handleTrackSelect(playingAlbum.tracks[currentIndex + 1])
+    }
+  }, [playingAlbum, currentTrack, handleTrackSelect])
+
+  const playPrevTrack = useCallback(() => {
+    if (!playingAlbum || !currentTrack) return
+    
+    const currentIndex = playingAlbum.tracks.findIndex(t => t.file === currentTrack.file)
+    if (currentIndex > 0) {
+      handleTrackSelect(playingAlbum.tracks[currentIndex - 1])
+    }
+  }, [playingAlbum, currentTrack, handleTrackSelect])
+
+  // Yeni fonksiyonlar: İlk veya son şarkıda mıyız kontrolü
+  const isFirstTrack = useCallback(() => {
+    if (!playingAlbum || !currentTrack) return false
+    
+    const currentIndex = playingAlbum.tracks.findIndex(t => t.file === currentTrack.file)
+    return currentIndex === 0
+  }, [playingAlbum, currentTrack])
+
+  const isLastTrack = useCallback(() => {
+    if (!playingAlbum || !currentTrack) return false
+    
+    const currentIndex = playingAlbum.tracks.findIndex(t => t.file === currentTrack.file)
+    return currentIndex === playingAlbum.tracks.length - 1
+  }, [playingAlbum, currentTrack])
+
+  // Handle track ended
+  useEffect(() => {
+    if (trackEnded) {
+      setTrackEnded(false) // Reset flag
+      playNextTrack()
+    }
+  }, [trackEnded, playNextTrack])
 
   const togglePlayPause = () => {
     if (!audioRef.current || !currentTrack) return
