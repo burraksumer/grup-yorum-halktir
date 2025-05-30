@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Head } from '@inertiajs/react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
@@ -174,9 +174,33 @@ export default function Index({ minioPublicUrl }: PageProps) {
   // Update volume
   useEffect(() => {
     if (audioRef.current) {
-      audioRef.current.volume = volume[0] / 100
+      // Linear 0-100'ü logaritmik curve'e çevir
+      const linearVolume = volume[0] / 100  // 0.0 - 1.0
+      const curvedVolume = Math.pow(linearVolume, 2)  // Squared curve - düşük seslerde daha hassas
+      audioRef.current.volume = curvedVolume
+      
+      console.log(`🔊 Volume: slider=${volume[0]}% -> actual=${(curvedVolume * 100).toFixed(1)}%`)
     }
   }, [volume])
+
+  // Player functions
+  const playNextTrack = useCallback(() => {
+    if (!selectedAlbum || !currentTrack) return
+    
+    const currentIndex = selectedAlbum.tracks.findIndex(t => t.file === currentTrack.file)
+    if (currentIndex < selectedAlbum.tracks.length - 1) {
+      handleTrackSelect(selectedAlbum.tracks[currentIndex + 1])
+    }
+  }, [selectedAlbum, currentTrack])
+
+  const playPrevTrack = useCallback(() => {
+    if (!selectedAlbum || !currentTrack) return
+    
+    const currentIndex = selectedAlbum.tracks.findIndex(t => t.file === currentTrack.file)
+    if (currentIndex > 0) {
+      handleTrackSelect(selectedAlbum.tracks[currentIndex - 1])
+    }
+  }, [selectedAlbum, currentTrack])
 
   // Handle track ended
   useEffect(() => {
@@ -184,7 +208,7 @@ export default function Index({ minioPublicUrl }: PageProps) {
       setTrackEnded(false) // Reset flag
       playNextTrack()
     }
-  }, [trackEnded, selectedAlbum, currentTrack])
+  }, [trackEnded, playNextTrack])
 
   const handleAlbumSelect = (album: Album) => {
     const wasPlaying = isPlaying
@@ -209,10 +233,6 @@ export default function Index({ minioPublicUrl }: PageProps) {
     else if (!currentTrack && album.tracks.length > 0) {
       setCurrentTrack(album.tracks[0])
     }
-  }
-
-  const setTrack = (track: Track) => {
-    setCurrentTrack(track)
   }
 
   const handleTrackSelect = (track: Track, autoPlay: boolean = true) => {
@@ -248,24 +268,6 @@ export default function Index({ minioPublicUrl }: PageProps) {
     } else {
       console.log('⏸️ Audio is playing, pausing...')
       audio.pause()
-    }
-  }
-
-  const playNextTrack = () => {
-    if (!selectedAlbum || !currentTrack) return
-    
-    const currentIndex = selectedAlbum.tracks.findIndex(t => t.file === currentTrack.file)
-    if (currentIndex < selectedAlbum.tracks.length - 1) {
-      handleTrackSelect(selectedAlbum.tracks[currentIndex + 1])
-    }
-  }
-
-  const playPrevTrack = () => {
-    if (!selectedAlbum || !currentTrack) return
-    
-    const currentIndex = selectedAlbum.tracks.findIndex(t => t.file === currentTrack.file)
-    if (currentIndex > 0) {
-      handleTrackSelect(selectedAlbum.tracks[currentIndex - 1])
     }
   }
 
