@@ -52,10 +52,10 @@ export default function Index({ minioPublicUrl }: PageProps) {
   const isMobile = useIsMobile()
   const audioRef = useRef<HTMLAudioElement>(null)
 
-  // Load albums metadata
+  // Load albums metadata - Now handled by Zustand action
   useEffect(() => {
-    fetchAlbumsAndSetInitialTrackStore(minioPublicUrl);
-  }, [fetchAlbumsAndSetInitialTrackStore, minioPublicUrl]);
+    fetchAlbumsAndSetInitialTrackStore(); // minioPublicUrl removed from store action
+  }, [fetchAlbumsAndSetInitialTrackStore]);
 
   // Effect 1: Handles setting the audio source, volume, and initial play for new tracks
   useEffect(() => {
@@ -240,9 +240,6 @@ export default function Index({ minioPublicUrl }: PageProps) {
       audio.removeEventListener('stalled', handleStalled);
     }
   }, [audioRef, setIsLoadingStore, setIsPlayingStore, setShouldAutoPlayStore, currentTrack])
-
-  const getIsLoading = useCallback(() => usePlayerStore.getState().isLoading, []);
-  const getAudioSrc = useCallback(() => audioRef.current?.src || '', []);
 
   const getPlayingAlbum = useCallback(() => {
     if (!currentTrack || !albumsData) return null

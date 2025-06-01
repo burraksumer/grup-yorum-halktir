@@ -38,7 +38,7 @@ interface PlayerState {
   shouldAutoPlay: boolean; // Added for managing auto play behavior
 
   // --- Actions ---
-  fetchAlbumsAndSetInitialTrack: (minioPublicUrl: string) => Promise<void>; // Added for initial data loading
+  fetchAlbumsAndSetInitialTrack: () => Promise<void>; // minioPublicUrl removed
   setVolume: (volume: number[]) => void;
   setMobileView: (view: 'albums' | 'tracks') => void;
 
@@ -70,7 +70,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   shouldAutoPlay: false,
 
   // --- Actions ---
-  fetchAlbumsAndSetInitialTrack: async (minioPublicUrl: string) => {
+  fetchAlbumsAndSetInitialTrack: async () => { // minioPublicUrl removed
     console.log('🎵 Zustand: Fetching albums and setting initial track...');
     set({ isLoading: true });
     try {
@@ -252,7 +252,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 // Log store changes for debugging (optional)
 if (process.env.NODE_ENV === 'development') {
   usePlayerStore.subscribe(
-    (state, prevState) => console.log('Zustand state changed:', { current: state, previous: prevState }),
-    // (state) => console.log('Zustand state changed:', state) // Alternative simpler log
+    (currentState) => console.log('Zustand state changed:', { current: currentState })
   );
 } 
