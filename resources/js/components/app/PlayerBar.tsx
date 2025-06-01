@@ -3,7 +3,7 @@ import CurrentTrackInfo from './CurrentTrackInfo'
 import ProgressBar from './ProgressBar'
 import PlayerControls from './PlayerControls'
 import VolumeControl from './VolumeControl'
-import type { Track, Album } from '@/pages/index'
+import type { Track, Album } from '@/store/playerStore'
 
 interface PlayerBarProps {
   audioRef: React.RefObject<HTMLAudioElement | null>

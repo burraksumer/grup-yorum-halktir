@@ -19,151 +19,230 @@ import AlbumList from '@/components/app/AlbumList'
 import MobileNavigation from '@/components/app/MobileNavigation'
 import MobileHeader from '@/components/app/MobileHeader'
 import DesktopHeader from '@/components/app/DesktopHeader'
-
-export interface Track {
-  track: number
-  title: string
-  file: string
-  disc?: number
-}
-
-export interface Album {
-  id: number
-  title: string
-  year: number
-  slug: string
-  cover: string
-  trackCount: number
-  tracks: Track[]
-  description?: string
-}
-
-export interface AlbumsData {
-  artist: string
-  totalAlbums: number
-  albums: Album[]
-}
+import { usePlayerStore, Album, Track, AlbumsData } from '@/store/playerStore';
 
 interface PageProps {
   minioPublicUrl: string
 }
 
 export default function Index({ minioPublicUrl }: PageProps) {
-  const [albumsData, setAlbumsData] = useState<AlbumsData | null>(null)
-  const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null)
-  const [currentTrack, setCurrentTrack] = useState<Track | null>(null)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [volume, setVolume] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const savedVolume = localStorage.getItem('grup-yorum-volume')
-      return savedVolume ? [parseInt(savedVolume)] : [75]
-    }
-    return [75]
-  })
-  const [shouldAutoPlay, setShouldAutoPlay] = useState(false)
-  const [trackEnded, setTrackEnded] = useState(false)
-  const [mobileView, setMobileView] = useState<'albums' | 'tracks'>('albums')
-  
+  // Zustand store selectors
+  const albumsData = usePlayerStore(state => state.albumsData);
+  const selectedAlbum = usePlayerStore(state => state.selectedAlbum);
+  const currentTrack = usePlayerStore(state => state.currentTrack);
+  const isPlaying = usePlayerStore(state => state.isPlaying);
+  const isLoading = usePlayerStore(state => state.isLoading);
+  const volume = usePlayerStore(state => state.volume);
+  const mobileView = usePlayerStore(state => state.mobileView);
+  const shouldAutoPlay = usePlayerStore(state => state.shouldAutoPlay);
+
+  // Zustand store actions
+  const fetchAlbumsAndSetInitialTrackStore = usePlayerStore(state => state.fetchAlbumsAndSetInitialTrack);
+  const setVolumeStore = usePlayerStore(state => state.setVolume);
+  const setMobileViewStore = usePlayerStore(state => state.setMobileView);
+  const setSelectedAlbumStore = usePlayerStore(state => state.setSelectedAlbum);
+  const setCurrentTrackStore = usePlayerStore(state => state.setCurrentTrack);
+  const togglePlayStore = usePlayerStore(state => state.togglePlay);
+  const setIsLoadingStore = usePlayerStore(state => state.setIsLoading);
+  const setIsPlayingStore = usePlayerStore(state => state.setIsPlaying);
+  const setShouldAutoPlayStore = usePlayerStore(state => state.setShouldAutoPlay);
+  const playNextTrackStore = usePlayerStore(state => state.playNextTrack);
+  const playPrevTrackStore = usePlayerStore(state => state.playPrevTrack);
+
   const isMobile = useIsMobile()
   const audioRef = useRef<HTMLAudioElement>(null)
 
   // Load albums metadata
   useEffect(() => {
-    fetch('/all_albums_metadata.json')
-      .then(response => response.json())
-      .then((data: AlbumsData) => {
-        setAlbumsData(data)
-        if (data.albums.length > 0) {
-          const firstAlbum = data.albums[0]
-          setSelectedAlbum(firstAlbum)
-          if (firstAlbum.tracks.length > 0) {
-            setCurrentTrack(firstAlbum.tracks[0])
-          }
-          console.log('🎵 Initial album and track set:', firstAlbum.title)
-        }
-      })
-      .catch(error => console.error('Error loading albums:', error))
-  }, [])
+    fetchAlbumsAndSetInitialTrackStore(minioPublicUrl);
+  }, [fetchAlbumsAndSetInitialTrackStore, minioPublicUrl]);
 
-  // Audio URL'ini hazırla - currentTrack veya selectedAlbum değiştiğinde
+  // Effect 1: Handles setting the audio source, volume, and initial play for new tracks
   useEffect(() => {
-    if (currentTrack && audioRef.current && minioPublicUrl && albumsData) {
+    if (!audioRef.current) return;
+    const audio = audioRef.current;
+
+    // Set volume whenever it changes in the store
+    const linearVolume = volume[0] / 100;
+    const curvedVolume = Math.pow(linearVolume, 2);
+    audio.volume = curvedVolume;
+    if (audio.muted && volume[0] > 0) {
+        // console.log('🔊 Audio Effect: Unmuting due to volume change');
+        // audio.muted = false; // Let user control mute explicitly, volume change shouldn't force unmute.
+    }
+    console.log(`🔊 Audio Effect (Volume): Set to ${volume[0]}% -> ${(curvedVolume * 100).toFixed(1)}%`);
+
+    if (currentTrack && albumsData) {
       const trackAlbum = albumsData.albums.find(album => 
         album.tracks.some(track => track.file === currentTrack.file)
-      )
-      if (!trackAlbum) return
-      const trackUrl = `${minioPublicUrl}/albums/${trackAlbum.year}-${trackAlbum.slug}/tracks/${currentTrack.file}`
-      console.log('🔗 Current audio src:', audioRef.current.src)
-      console.log('🔗 New track URL:', trackUrl)
-      console.log('🔗 shouldAutoPlay:', shouldAutoPlay)
-      const currentSrc = audioRef.current.src
-      const isSameTrack = currentSrc === trackUrl
-      if (!isSameTrack) {
-        console.log('✅ Setting new audio URL')
-        audioRef.current.src = trackUrl
-        const linearVolume = volume[0] / 100
-        const curvedVolume = Math.pow(linearVolume, 2)
-        audioRef.current.volume = curvedVolume
-        audioRef.current.muted = false
-        console.log(`🔊 Volume set with URL: ${volume[0]}% -> ${(curvedVolume * 100).toFixed(1)}%`)
+      );
+      if (!trackAlbum) {
+        console.error('❌ Audio Effect: Could not find album for current track', currentTrack.title);
+        return;
+      }
+
+      const newTrackUrl = `${minioPublicUrl}/albums/${trackAlbum.year}-${trackAlbum.slug}/tracks/${currentTrack.file}`;
+      const currentAudioSrc = audio.src.endsWith(newTrackUrl.substring(newTrackUrl.lastIndexOf('/') + 1)) ? audio.src : decodeURIComponent(audio.src);
+      
+      console.log('🔄 Audio Effect (Track Change?):');
+      console.log('  🎵 CT:', currentTrack.title);
+      console.log('  🆕 New URL:', newTrackUrl);
+      console.log('  🎧 Existing Src:', currentAudioSrc);
+      console.log('  🤖 SA:', shouldAutoPlay);
+
+      if (currentAudioSrc !== newTrackUrl) {
+        console.log(`✅ Audio Effect: Setting new src: ${newTrackUrl}`);
+        audio.src = newTrackUrl;
+        // When src changes, browser automatically stops playback.
+        // We should explicitly load and then play if shouldAutoPlay is true.
+        setIsLoadingStore(true); // Show loading for new track
+        audio.load(); // Important to load the new source
         if (shouldAutoPlay) {
-          console.log('🚀 Auto-playing new track')
-          audioRef.current.play().catch(err => {
-            console.error('❌ Auto-play failed:', err)
-            setIsLoading(false)
-          })
-          setShouldAutoPlay(false) 
+          // Play will be attempted by the play/pause effect or by the 'canplay' event setting isPlaying.
+          // For now, let's set isPlaying to true to trigger the other effect if needed.
+          // Or, more directly, the store's setCurrentTrack already sets shouldAutoPlay.
+          // The play/pause effect will pick up isPlaying=true if shouldAutoPlay was true.
+          // Let's rely on the play/pause effect to handle the actual play command after src is set and loaded.
+          console.log('🚀 Audio Effect: New track source set, shouldAutoPlay is true. isPlaying will trigger play.');
+          // We set isPlaying true in store if shouldAutoPlay. This will trigger the other useEffect.
+          // usePlayerStore.getState().setIsPlaying(true); //This might be too soon, wait for canplay
+        } else {
+          // If not auto-playing, ensure isPlaying is false and loading is false after src change
+          // setIsPlayingStore(false); // setCurrentTrack in store already sets isPlaying to false initially
+          // setIsLoadingStore(false); // isLoading will be false once 'canplay' or 'playing' occurs
         }
+      } 
+    } else if (!currentTrack) {
+      console.log('🔇 Audio Effect: No current track. Clearing src and pausing.');
+      audio.src = '';
+      if (!audio.paused) audio.pause();
+      setIsLoadingStore(false); // No track, not loading
+      setIsPlayingStore(false); // No track, not playing
+    }
+  }, [currentTrack, volume, minioPublicUrl, albumsData, setIsLoadingStore, setIsPlayingStore, shouldAutoPlay]); // Keep shouldAutoPlay here for new track logic
+
+
+  // Effect 2: Handles play/pause control based on isPlaying state from store
+  useEffect(() => {
+    if (!audioRef.current) return;
+    const audio = audioRef.current;
+
+    console.log(`⏯️ Audio Effect (Play/Pause): isPlaying=${isPlaying}, CT=${currentTrack?.title}`);
+
+    if (isPlaying && currentTrack && audio.src) { // audio.src check to ensure it's loaded
+      if (audio.paused) {
+        console.log('▶️ Audio Effect: isPlaying is true & audio paused. Calling play()');
+        // setIsLoadingStore(true); // Loading is handled by togglePlay or track change
+        audio.play().catch(err => {
+          console.error('❌ Audio Effect: Play failed', err);
+          setIsPlayingStore(false); // Update store if play fails
+          setIsLoadingStore(false);
+        });
       } else {
-        console.log('⏭️ Same track URL, skipping')
-        if (shouldAutoPlay) {
-          console.log('🚀 Same track but auto-playing')
-          audioRef.current.play().catch(err => {
-            console.error('❌ Auto-play failed:', err)
-            setIsLoading(false)
-          })
-          setShouldAutoPlay(false) 
-        }
+        // console.log('✅ Audio Effect: isPlaying is true & audio already playing.');
+      }
+    } else {
+      if (!audio.paused) {
+        console.log('⏸️ Audio Effect: isPlaying is false or no track/src. Calling pause()');
+        audio.pause();
+      } else {
+        // console.log('✅ Audio Effect: isPlaying is false & audio already paused.');
       }
     }
-  }, [currentTrack, minioPublicUrl, shouldAutoPlay, albumsData, volume, setIsLoading])
+  }, [isPlaying, currentTrack, setIsLoadingStore, setIsPlayingStore]); // Depends on isPlaying and currentTrack
 
-  // Save volume to localStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('grup-yorum-volume', volume[0].toString())
-      console.log('💾 Volume saved to localStorage:', volume[0])
-    }
-  }, [volume])
 
   // Audio event listeners
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
 
-    const handleCanPlay = () => { if (audio.readyState >= 3) setIsLoading(false) }
-    const handlePlaying = () => { console.log('▶️ Audio started playing'); setIsPlaying(true); setIsLoading(false) }
-    const handlePause = () => { console.log('⏸️ Audio paused'); setIsPlaying(false); setIsLoading(false) }
-    const handleEnded = () => { console.log('🔚 Audio ended'); setIsPlaying(false); setIsLoading(false); setTrackEnded(true) }
-    const handleError = (e: Event) => { console.error('❌ Audio error:', e); setIsLoading(false); setIsPlaying(false) }
+    const handleCanPlay = () => { 
+      console.log('✅ Audio can play through.');
+      const storeActions = usePlayerStore.getState();
+      // If it was loading and is the current track, mark as not loading.
+      // If shouldAutoPlay was true for this track and it's now ready, isPlaying should become true.
+      if (storeActions.isLoading && audioRef.current?.src && audioRef.current.src.includes(storeActions.currentTrack?.file || '###NOFILE###')) {
+        // setIsLoadingStore(false); // isLoading is set to false by 'playing' event or if play fails
+        if (storeActions.shouldAutoPlay && !storeActions.isPlaying) {
+            console.log('▶️ Audio Event (CanPlay): shouldAutoPlay is true and not playing. Setting isPlaying to true.')
+            // This will trigger the play/pause useEffect to call audio.play()
+            // setIsPlayingStore(true); 
+            // Let's try to play directly here if it was meant to autoplay and src is set
+            if (audioRef.current && audioRef.current.src) {
+                audioRef.current.play().catch(e => {
+                    console.error("❌ Audio Event (CanPlay): Auto-play failed", e);
+                    storeActions.setIsLoading(false);
+                    storeActions.setIsPlaying(false);
+                });
+            } else {
+                 storeActions.setIsLoading(false); // No src, so not loading
+            }
+        } else if (!storeActions.shouldAutoPlay && !storeActions.isPlaying) {
+            // If it was not meant to auto-play and not playing, it means it's loaded but paused.
+            storeActions.setIsLoading(false);
+        }
+      }
+    }
+    const handlePlaying = () => { 
+      console.log('▶️ Audio started playing (event)'); 
+      setIsPlayingStore(true); 
+      setIsLoadingStore(false); 
+      setShouldAutoPlayStore(false);
+    }
+    const handlePause = () => { 
+      console.log('⏸️ Audio paused (event)'); 
+      setIsPlayingStore(false); 
+    }
+    const handleEnded = () => { 
+      console.log('�� Audio ended (event). Calling playNextTrackStore.'); 
+      setIsPlayingStore(false); 
+      // setIsLoadingStore(false); // Not needed, playNextTrackStore will handle loading for the new track if any
+      // setTrackEnded(true); // Remove, call playNextTrackStore directly
+      usePlayerStore.getState().playNextTrack(); // Call store action directly
+    }
+    const handleError = (e: Event) => { 
+      console.error('❌ Audio error (event):', e); 
+      setIsLoadingStore(false); 
+      setIsPlayingStore(false); 
+    }
+    const handleLoadStart = () => {
+      console.log('⏳ Audio load started (event)');
+    }
+    const handleWaiting = () => {
+      console.log('⏳ Audio waiting for data (buffering)');
+      setIsLoadingStore(true);
+    }
+    const handleStalled = () => {
+      console.log('⚠️ Audio stalled (event)');
+      setIsLoadingStore(true);
+    }
 
     console.log('🎧 Setting up audio event listeners in Index.tsx')
-    audio.addEventListener('canplay', handleCanPlay)
+    audio.addEventListener('canplaythrough', handleCanPlay)
     audio.addEventListener('playing', handlePlaying)
     audio.addEventListener('pause', handlePause)
     audio.addEventListener('ended', handleEnded)
     audio.addEventListener('error', handleError)
+    audio.addEventListener('loadstart', handleLoadStart); 
+    audio.addEventListener('waiting', handleWaiting);
+    audio.addEventListener('stalled', handleStalled);
 
     return () => {
       console.log('🗑️ Cleaning up audio event listeners in Index.tsx')
-      audio.removeEventListener('canplay', handleCanPlay)
+      audio.removeEventListener('canplaythrough', handleCanPlay)
       audio.removeEventListener('playing', handlePlaying)
       audio.removeEventListener('pause', handlePause)
       audio.removeEventListener('ended', handleEnded)
       audio.removeEventListener('error', handleError)
+      audio.removeEventListener('loadstart', handleLoadStart);
+      audio.removeEventListener('waiting', handleWaiting);
+      audio.removeEventListener('stalled', handleStalled);
     }
-  }, [currentTrack, audioRef, setIsLoading, setIsPlaying, setTrackEnded])
+  }, [audioRef, setIsLoadingStore, setIsPlayingStore, setShouldAutoPlayStore, currentTrack])
+
+  const getIsLoading = useCallback(() => usePlayerStore.getState().isLoading, []);
+  const getAudioSrc = useCallback(() => audioRef.current?.src || '', []);
 
   const getPlayingAlbum = useCallback(() => {
     if (!currentTrack || !albumsData) return null
@@ -175,50 +254,12 @@ export default function Index({ minioPublicUrl }: PageProps) {
   const playingAlbum = useMemo(() => getPlayingAlbum(), [getPlayingAlbum])
 
   const handleAlbumSelect = useCallback((album: Album) => {
-    setSelectedAlbum(album)
-    console.log('🎵 Album selected for viewing:', album.title)
-  }, [setSelectedAlbum])
+    setSelectedAlbumStore(album);
+  }, [setSelectedAlbumStore]);
 
   const handleTrackSelect = useCallback((track: Track, autoPlay: boolean = true) => {
-    console.log('🎵 Track selected:', track.title, 'autoPlay:', autoPlay)
-    console.log('🎵 Current track:', currentTrack?.title)
-    if (currentTrack?.file === track.file) {
-      console.log('⏭️ Same track selected, ignoring')
-      return
-    }
-    setCurrentTrack(track)
-    if (!currentTrack && albumsData) {
-      const trackAlbum = albumsData.albums.find(album => 
-        album.tracks.some(t => t.file === track.file)
-      )
-      if (trackAlbum) {
-        setSelectedAlbum(trackAlbum)
-        console.log('🎵 Initial album set:', trackAlbum.title)
-      }
-    }
-    if (autoPlay) {
-      console.log('🚀 Setting shouldAutoPlay to true')
-      setShouldAutoPlay(true)
-    }
-  }, [currentTrack, albumsData, setCurrentTrack, setSelectedAlbum, setShouldAutoPlay])
-
-  const playNextTrack = useCallback(() => {
-    const album = playingAlbum
-    if (!album || !currentTrack) return
-    const currentIndex = album.tracks.findIndex(t => t.file === currentTrack.file)
-    if (currentIndex < album.tracks.length - 1) {
-      handleTrackSelect(album.tracks[currentIndex + 1])
-    }
-  }, [playingAlbum, currentTrack, handleTrackSelect])
-
-  const playPrevTrack = useCallback(() => {
-    const album = playingAlbum
-    if (!album || !currentTrack) return
-    const currentIndex = album.tracks.findIndex(t => t.file === currentTrack.file)
-    if (currentIndex > 0) {
-      handleTrackSelect(album.tracks[currentIndex - 1])
-    }
-  }, [playingAlbum, currentTrack, handleTrackSelect])
+    setCurrentTrackStore(track, autoPlay);
+  }, [setCurrentTrackStore]);
 
   const isFirstTrack = useCallback(() => {
     const album = playingAlbum
@@ -232,28 +273,9 @@ export default function Index({ minioPublicUrl }: PageProps) {
     return album.tracks.findIndex(t => t.file === currentTrack.file) === album.tracks.length - 1
   }, [playingAlbum, currentTrack])
 
-  useEffect(() => {
-    if (trackEnded) {
-      setTrackEnded(false) 
-      playNextTrack() 
-    }
-  }, [trackEnded, playNextTrack, setTrackEnded])
-
   const togglePlayPause = useCallback(() => {
-    if (!audioRef.current || !currentTrack) return
-    const audio = audioRef.current
-    console.log('🎵 Toggle clicked, audio.paused:', audio.paused, 'audio.readyState:', audio.readyState)
-    if (audio.paused) {
-      console.log('▶️ Audio is paused, playing...')
-      audio.play().catch(err => {
-        console.error('❌ Play failed:', err)
-        setIsLoading(false) 
-      })
-    } else {
-      console.log('⏸️ Audio is playing, pausing...')
-      audio.pause()
-    }
-  }, [currentTrack, setIsLoading, audioRef])
+    togglePlayStore();
+  }, [togglePlayStore])
 
   const handleProgressChange = useCallback((value: number[]) => {
     if (audioRef.current) {
@@ -263,6 +285,7 @@ export default function Index({ minioPublicUrl }: PageProps) {
 
   const handleVolumeChange = useCallback((value: number[]) => {
     console.log('🎛️ Volume slider changed to:', value[0])
+    setVolumeStore(value);
     if (audioRef.current) {
       const linearVolume = value[0] / 100
       const curvedVolume = Math.pow(linearVolume, 2)
@@ -273,17 +296,18 @@ export default function Index({ minioPublicUrl }: PageProps) {
       }
       console.log(`🔊 Volume immediately set: ${value[0]}% -> ${(curvedVolume * 100).toFixed(1)}%`)
     }
-    setVolume(value)
-  }, [setVolume, audioRef])
+  }, [setVolumeStore, audioRef])
 
   const goToPlayingAlbumMobile = useCallback(() => {
     if (playingAlbum) {
-      setSelectedAlbum(playingAlbum)
-      setMobileView('tracks')
+      if (usePlayerStore.getState().selectedAlbum?.id !== playingAlbum.id) {
+        setSelectedAlbumStore(playingAlbum);
+      }
+      setMobileViewStore('tracks')
     }
-  }, [playingAlbum, setSelectedAlbum, setMobileView])
+  }, [playingAlbum, setSelectedAlbumStore, setMobileViewStore])
 
-  const onAlbumSelectMobileCallback = useCallback(() => setMobileView('tracks'), [setMobileView])
+  const onAlbumSelectMobileCallback = useCallback(() => setMobileViewStore('tracks'), [setMobileViewStore])
 
   if (!albumsData) {
     return (
@@ -311,7 +335,7 @@ export default function Index({ minioPublicUrl }: PageProps) {
           {/* Mobile Navigation */}
           <MobileNavigation 
             mobileView={mobileView}
-            onSetMobileView={setMobileView}
+            onSetMobileView={setMobileViewStore}
             hasSelectedAlbum={!!selectedAlbum} 
           />
 
@@ -364,8 +388,8 @@ export default function Index({ minioPublicUrl }: PageProps) {
             playingAlbum={playingAlbum || null}
             onProgressChange={handleProgressChange}
             togglePlayPause={togglePlayPause}
-            playNextTrack={playNextTrack}
-            playPrevTrack={playPrevTrack}
+            playNextTrack={playNextTrackStore}
+            playPrevTrack={playPrevTrackStore}
             isPlaying={isPlaying}
             isLoading={isLoading}
             isFirstTrack={isFirstTrack()}
@@ -392,7 +416,7 @@ export default function Index({ minioPublicUrl }: PageProps) {
                 albumsData={albumsData}
                 selectedAlbum={selectedAlbum}
                 playingAlbum={playingAlbum || null}
-                onSetSelectedAlbum={handleAlbumSelect}
+                onSetSelectedAlbum={setSelectedAlbumStore}
             />
         )}
 
@@ -459,8 +483,8 @@ export default function Index({ minioPublicUrl }: PageProps) {
           playingAlbum={playingAlbum || null}
           onProgressChange={handleProgressChange}
           togglePlayPause={togglePlayPause}
-          playNextTrack={playNextTrack}
-          playPrevTrack={playPrevTrack}
+          playNextTrack={playNextTrackStore}
+          playPrevTrack={playPrevTrackStore}
           isPlaying={isPlaying}
           isLoading={isLoading}
           isFirstTrack={isFirstTrack()}
