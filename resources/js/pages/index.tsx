@@ -35,6 +35,10 @@ export default function Index({ minioPublicUrl }: PageProps) {
   const volume = usePlayerStore(state => state.volume);
   const mobileView = usePlayerStore(state => state.mobileView);
   const shouldAutoPlay = usePlayerStore(state => state.shouldAutoPlay);
+  const storeCurrentTime = usePlayerStore(state => state.currentTime); // For restoring currentTime
+  const justRehydrated = usePlayerStore(state => state.justRehydrated); // For restoring currentTime
+  const _hasHydrated = usePlayerStore(state => state._hasHydrated); // For initial loading UI
+  const setDurationStore = usePlayerStore(state => state.setDuration); // To store track duration
 
   // Zustand store actions
   const fetchAlbumsAndSetInitialTrackStore = usePlayerStore(state => state.fetchAlbumsAndSetInitialTrack);
@@ -48,6 +52,9 @@ export default function Index({ minioPublicUrl }: PageProps) {
   const setShouldAutoPlayStore = usePlayerStore(state => state.setShouldAutoPlay);
   const playNextTrackStore = usePlayerStore(state => state.playNextTrack);
   const playPrevTrackStore = usePlayerStore(state => state.playPrevTrack);
+  const setCurrentTimeStore = usePlayerStore(state => state.setCurrentTime);
+  const handleProgressChangeStoreAction = usePlayerStore(state => state.handleProgressChange);
+  const setJustRehydratedStore = usePlayerStore(state => state.setJustRehydrated); // Action for the flag
 
   const isMobile = useIsMobile()
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -62,17 +69,13 @@ export default function Index({ minioPublicUrl }: PageProps) {
     if (!audioRef.current) return;
     const audio = audioRef.current;
 
-    // Set volume whenever it changes in the store
     const linearVolume = volume[0] / 100;
     const curvedVolume = Math.pow(linearVolume, 2);
     audio.volume = curvedVolume;
-    if (audio.muted && volume[0] > 0) {
-        // console.log('🔊 Audio Effect: Unmuting due to volume change');
-        // audio.muted = false; // Let user control mute explicitly, volume change shouldn't force unmute.
-    }
     console.log(`🔊 Audio Effect (Volume): Set to ${volume[0]}% -> ${(curvedVolume * 100).toFixed(1)}%`);
 
     if (currentTrack && albumsData) {
+      console.log('[Effect 1] CurrentTrack and AlbumsData available:', currentTrack.title, 'Albums count:', albumsData.albums.length);
       const trackAlbum = albumsData.albums.find(album => 
         album.tracks.some(track => track.file === currentTrack.file)
       );
@@ -82,44 +85,57 @@ export default function Index({ minioPublicUrl }: PageProps) {
       }
 
       const newTrackUrl = `${minioPublicUrl}/albums/${trackAlbum.year}-${trackAlbum.slug}/tracks/${currentTrack.file}`;
-      const currentAudioSrc = audio.src.endsWith(newTrackUrl.substring(newTrackUrl.lastIndexOf('/') + 1)) ? audio.src : decodeURIComponent(audio.src);
+      const decodedCurrentAudioSrc = audio.src ? decodeURIComponent(audio.src) : "";
       
-      console.log('🔄 Audio Effect (Track Change?):');
-      console.log('  🎵 CT:', currentTrack.title);
-      console.log('  🆕 New URL:', newTrackUrl);
-      console.log('  🎧 Existing Src:', currentAudioSrc);
-      console.log('  🤖 SA:', shouldAutoPlay);
+      console.log('[Effect 1] Checking src: Current decoded src:', decodedCurrentAudioSrc, 'New URL:', newTrackUrl);
 
-      if (currentAudioSrc !== newTrackUrl) {
+      // If the decoded current src is different from the new desired URL, update it.
+      if (decodedCurrentAudioSrc !== newTrackUrl) {
         console.log(`✅ Audio Effect: Setting new src: ${newTrackUrl}`);
         audio.src = newTrackUrl;
-        // When src changes, browser automatically stops playback.
-        // We should explicitly load and then play if shouldAutoPlay is true.
-        setIsLoadingStore(true); // Show loading for new track
-        audio.load(); // Important to load the new source
+        setIsLoadingStore(true); 
+        audio.load(); 
+        console.log('✅ Audio Effect: audio.load() called.');
+        
+        // Log network state shortly after load() to see if it starts loading
+        setTimeout(() => {
+          if (audioRef.current) { // Check if ref is still valid
+            console.log(`[Effect 1 - Post Load] networkState: ${audioRef.current.networkState}, readyState: ${audioRef.current.readyState}, error: ${audioRef.current.error?.message}`);
+            switch (audioRef.current.networkState) {
+              case HTMLMediaElement.NETWORK_EMPTY: console.log('[Effect 1 - Post Load] Network State: NETWORK_EMPTY (0)'); break;
+              case HTMLMediaElement.NETWORK_IDLE: console.log('[Effect 1 - Post Load] Network State: NETWORK_IDLE (1)'); break;
+              case HTMLMediaElement.NETWORK_LOADING: console.log('[Effect 1 - Post Load] Network State: NETWORK_LOADING (2) - SHOULD BE THIS!'); break;
+              case HTMLMediaElement.NETWORK_NO_SOURCE: console.log('[Effect 1 - Post Load] Network State: NETWORK_NO_SOURCE (3)'); break;
+              default: console.log('[Effect 1 - Post Load] Network State: Unknown');
+            }
+          }
+        }, 100); // 100ms delay
+
+        // shouldAutoPlay logic is for when setCurrentTrack is called with autoPlay=true
+        // For rehydration, shouldAutoPlay is false, so this block won't run for auto-play.
         if (shouldAutoPlay) {
-          // Play will be attempted by the play/pause effect or by the 'canplay' event setting isPlaying.
-          // For now, let's set isPlaying to true to trigger the other effect if needed.
-          // Or, more directly, the store's setCurrentTrack already sets shouldAutoPlay.
-          // The play/pause effect will pick up isPlaying=true if shouldAutoPlay was true.
-          // Let's rely on the play/pause effect to handle the actual play command after src is set and loaded.
-          console.log('🚀 Audio Effect: New track source set, shouldAutoPlay is true. isPlaying will trigger play.');
-          // We set isPlaying true in store if shouldAutoPlay. This will trigger the other useEffect.
-          // usePlayerStore.getState().setIsPlaying(true); //This might be too soon, wait for canplay
-        } else {
-          // If not auto-playing, ensure isPlaying is false and loading is false after src change
-          // setIsPlayingStore(false); // setCurrentTrack in store already sets isPlaying to false initially
-          // setIsLoadingStore(false); // isLoading will be false once 'canplay' or 'playing' occurs
+          console.log('🚀 Audio Effect: New track source set, shouldAutoPlay is true. isPlaying will trigger play if store indicates.');
+          // The play/pause effect (Effect 2) will handle actual play() if isPlaying is true in store.
+          // setCurrentTrack (if called with autoPlay=true) sets isPlaying to false and isLoading to true initially.
+          // The 'canplay' or 'playing' event will then set isPlaying true / isLoading false.
         }
-      } 
+      } else {
+        console.log('[Effect 1] Src is already correct. No change to audio.src needed.');
+        // If src is already correct (e.g. rehydrated track, Effect 1 runs after Effect for currentTime restoration attempted it)
+        // ensure isLoading is false if we are not supposed to be auto-playing and not already playing.
+        // This handles the case where the rehydrated track is loaded, but play hasn't been pressed.
+        // The loadedmetadata event handler is now primarily responsible for isLoading=false for rehydrated tracks.
+      }
     } else if (!currentTrack) {
       console.log('🔇 Audio Effect: No current track. Clearing src and pausing.');
       audio.src = '';
       if (!audio.paused) audio.pause();
-      setIsLoadingStore(false); // No track, not loading
-      setIsPlayingStore(false); // No track, not playing
+      setIsLoadingStore(false); 
+      setIsPlayingStore(false); 
+    } else if (!albumsData && currentTrack) {
+      console.log('[Effect 1] CurrentTrack available, but AlbumsData is not yet. Waiting for AlbumsData to set src.');
     }
-  }, [currentTrack, volume, minioPublicUrl, albumsData, setIsLoadingStore, setIsPlayingStore, shouldAutoPlay]); // Keep shouldAutoPlay here for new track logic
+  }, [currentTrack, volume, minioPublicUrl, albumsData, setIsLoadingStore, setIsPlayingStore, shouldAutoPlay]);
 
 
   // Effect 2: Handles play/pause control based on isPlaying state from store
@@ -159,47 +175,64 @@ export default function Index({ minioPublicUrl }: PageProps) {
 
     const handleCanPlay = () => { 
       console.log('✅ Audio can play through.');
-      const storeActions = usePlayerStore.getState();
-      // If it was loading and is the current track, mark as not loading.
-      // If shouldAutoPlay was true for this track and it's now ready, isPlaying should become true.
-      if (storeActions.isLoading && audioRef.current?.src && audioRef.current.src.includes(storeActions.currentTrack?.file || '###NOFILE###')) {
-        // setIsLoadingStore(false); // isLoading is set to false by 'playing' event or if play fails
-        if (storeActions.shouldAutoPlay && !storeActions.isPlaying) {
-            console.log('▶️ Audio Event (CanPlay): shouldAutoPlay is true and not playing. Setting isPlaying to true.')
-            // This will trigger the play/pause useEffect to call audio.play()
-            // setIsPlayingStore(true); 
-            // Let's try to play directly here if it was meant to autoplay and src is set
+      const store = usePlayerStore.getState();
+      
+      // Check if this is canplay after a rehydrated seek
+      if (store.justRehydrated && store.currentTrack && audioRef.current?.currentTime && Math.abs(audioRef.current.currentTime - store.currentTime) < 0.5) {
+        console.log('[CanPlay] Rehydrated track is now playable at seeked time. Setting flags.');
+        setIsLoadingStore(false);
+        setJustRehydratedStore(false);
+        usePlayerStore.getState().setHasHydrated(true);
+        
+        // If it was also meant to autoplay (rare for rehydration)
+        if (store.shouldAutoPlay && !store.isPlaying) {
+            console.log('[CanPlay] Rehydrated track also has shouldAutoPlay. Attempting play.');
+            if (audioRef.current && audioRef.current.src) {
+                audioRef.current.play().catch(e => {
+                    console.error("[CanPlay] Rehydrated Auto-play failed", e);
+                    setIsLoadingStore(false);
+                    setIsPlayingStore(false); // Corrected from storeActions to direct calls
+                });
+            }
+        }
+      } else if (store.isLoading) {
+        // Standard loading completion (not specific to rehydration seek)
+        if (!store.shouldAutoPlay && !store.isPlaying) {
+          console.log('[CanPlay] Standard load ready (not autoplaying/playing). Setting isLoading=false.');
+          setIsLoadingStore(false);
+        } else if (store.shouldAutoPlay && !store.isPlaying) {
+            console.log('▶️ Audio Event (CanPlay): shouldAutoPlay is true and not playing. Attempting play.')
             if (audioRef.current && audioRef.current.src) {
                 audioRef.current.play().catch(e => {
                     console.error("❌ Audio Event (CanPlay): Auto-play failed", e);
-                    storeActions.setIsLoading(false);
-                    storeActions.setIsPlaying(false);
+                    setIsLoadingStore(false);
+                    setIsPlayingStore(false);
                 });
             } else {
-                 storeActions.setIsLoading(false); // No src, so not loading
+                 setIsLoadingStore(false); 
             }
-        } else if (!storeActions.shouldAutoPlay && !storeActions.isPlaying) {
-            // If it was not meant to auto-play and not playing, it means it's loaded but paused.
-            storeActions.setIsLoading(false);
         }
       }
     }
     const handlePlaying = () => { 
       console.log('▶️ Audio started playing (event)'); 
+      const store = usePlayerStore.getState(); // Get current store state
+      if (store.justRehydrated) {
+        console.log('[Playing] First play event after rehydration. Setting flags.');
+        setJustRehydratedStore(false);
+        usePlayerStore.getState().setHasHydrated(true);
+      }
       setIsPlayingStore(true); 
       setIsLoadingStore(false); 
-      setShouldAutoPlayStore(false);
     }
     const handlePause = () => { 
       console.log('⏸️ Audio paused (event)'); 
       setIsPlayingStore(false); 
     }
     const handleEnded = () => { 
-      console.log('�� Audio ended (event). Calling playNextTrackStore.'); 
+      console.log('⏹️ Audio ended (event). Calling playNextTrackStore.'); 
       setIsPlayingStore(false); 
-      // setIsLoadingStore(false); // Not needed, playNextTrackStore will handle loading for the new track if any
-      // setTrackEnded(true); // Remove, call playNextTrackStore directly
-      usePlayerStore.getState().playNextTrack(); // Call store action directly
+      usePlayerStore.getState().playNextTrack();
     }
     const handleError = (e: Event) => { 
       console.error('❌ Audio error (event):', e); 
@@ -217,6 +250,61 @@ export default function Index({ minioPublicUrl }: PageProps) {
       console.log('⚠️ Audio stalled (event)');
       setIsLoadingStore(true);
     }
+    const handleLoadedMetadata = () => {
+      console.log('✅ Audio Event (LoadedMetadata): Fired.');
+      const store = usePlayerStore.getState();
+      console.log(`[LMD] store.justRehydrated: ${store.justRehydrated}, store.currentTrack: ${!!store.currentTrack}, store.currentTime: ${store.currentTime}`);
+
+      if (audioRef.current) {
+        setDurationStore(audioRef.current.duration);
+        console.log(`[LMD] Duration set to ${audioRef.current.duration}`);
+        
+        if (store.justRehydrated && store.currentTrack && store.currentTime > 0) {
+          console.log('[LMD] Condition: justRehydrated && currentTrack && currentTime > 0 is TRUE');
+          const trackAlbum = store.albumsData?.albums.find(album => 
+            album.tracks.some(track => track.file === store.currentTrack!.file)
+          );
+          if (trackAlbum) {
+            console.log('[LMD] Found trackAlbum:', trackAlbum.title);
+            const expectedSrcSuffix = `/albums/${trackAlbum.year}-${trackAlbum.slug}/tracks/${store.currentTrack!.file}`;
+            const currentAudioSrc = audioRef.current.src ? decodeURIComponent(audioRef.current.src) : "";
+            console.log(`[LMD] Expected src suffix: ${expectedSrcSuffix}`);
+            console.log(`[LMD] Current audio src: ${currentAudioSrc}`);
+
+            if (currentAudioSrc.endsWith(expectedSrcSuffix)) {
+              console.log('[LMD] Rehydration: Src matches. Setting audio.currentTime & isLoading=true. Flags will be set on canplay/playing.');
+              audioRef.current.currentTime = store.currentTime;
+              setIsLoadingStore(true); // We've seeked, now waiting for it to be playable
+              // setJustRehydratedStore(false); // Moved to canplay/playing
+              // usePlayerStore.getState().setHasHydrated(true); // Moved to canplay/playing
+            } else {
+              console.warn('[LMD] Src suffix MISMATCH. Not restoring currentTime. Setting flags.');
+              setIsLoadingStore(false); 
+              setJustRehydratedStore(false); 
+              usePlayerStore.getState().setHasHydrated(true);
+            }
+          } else {
+            console.warn('[LMD] Could not find album for current track. Not restoring currentTime. Setting flags.');
+            setIsLoadingStore(false); 
+            setJustRehydratedStore(false); 
+            usePlayerStore.getState().setHasHydrated(true);
+          }
+        } else if (store.justRehydrated) {
+          console.log('[LMD] Condition: justRehydrated is TRUE, but no currentTrack or currentTime <= 0. Setting flags.');
+          // This case means rehydration happened, but no valid track/time to restore.
+          setIsLoadingStore(false); 
+          setJustRehydratedStore(false);
+          usePlayerStore.getState().setHasHydrated(true);
+          console.log('[LMD] In else-if for justRehydrated: set isLoading false, justRehydrated false, hydrated true.');
+        } else {
+          console.log('[LMD] Condition: store.justRehydrated is FALSE. No rehydration logic executed here for time restoration.');
+          // Potentially, if it's a normal track load (not rehydration), and we need to reset loading
+          // This might be handled by 'playing' or 'canplaythrough'
+        }
+      } else {
+        console.warn('[LMD] audioRef.current is null.');
+      }
+    }
 
     console.log('🎧 Setting up audio event listeners in Index.tsx')
     audio.addEventListener('canplaythrough', handleCanPlay)
@@ -227,6 +315,7 @@ export default function Index({ minioPublicUrl }: PageProps) {
     audio.addEventListener('loadstart', handleLoadStart); 
     audio.addEventListener('waiting', handleWaiting);
     audio.addEventListener('stalled', handleStalled);
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
 
     return () => {
       console.log('🗑️ Cleaning up audio event listeners in Index.tsx')
@@ -238,8 +327,9 @@ export default function Index({ minioPublicUrl }: PageProps) {
       audio.removeEventListener('loadstart', handleLoadStart);
       audio.removeEventListener('waiting', handleWaiting);
       audio.removeEventListener('stalled', handleStalled);
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
     }
-  }, [audioRef, setIsLoadingStore, setIsPlayingStore, setShouldAutoPlayStore, currentTrack])
+  }, [audioRef, setIsLoadingStore, setIsPlayingStore, setShouldAutoPlayStore, currentTrack, setDurationStore, setJustRehydratedStore, albumsData, minioPublicUrl]) // Added albumsData and minioPublicUrl as they are used in LMD trackAlbum logic, though indirectly via store.getState()
 
   const getPlayingAlbum = useCallback(() => {
     if (!currentTrack || !albumsData) return null
@@ -275,10 +365,12 @@ export default function Index({ minioPublicUrl }: PageProps) {
   }, [togglePlayStore])
 
   const handleProgressChange = useCallback((value: number[]) => {
+    const newTime = value[0];
     if (audioRef.current) {
-      audioRef.current.currentTime = value[0]
+      audioRef.current.currentTime = newTime; 
     }
-  }, [audioRef])
+    handleProgressChangeStoreAction(newTime);
+  }, [audioRef, handleProgressChangeStoreAction]);
 
   const handleVolumeChange = useCallback((value: number[]) => {
     console.log('🎛️ Volume slider changed to:', value[0])
@@ -388,7 +480,7 @@ export default function Index({ minioPublicUrl }: PageProps) {
             playNextTrack={playNextTrackStore}
             playPrevTrack={playPrevTrackStore}
             isPlaying={isPlaying}
-            isLoading={isLoading}
+            isLoading={!_hasHydrated || isLoading}
             isFirstTrack={isFirstTrack()}
             isLastTrack={isLastTrack()}
             hasCurrentTrack={!!currentTrack}
@@ -483,7 +575,7 @@ export default function Index({ minioPublicUrl }: PageProps) {
           playNextTrack={playNextTrackStore}
           playPrevTrack={playPrevTrackStore}
           isPlaying={isPlaying}
-          isLoading={isLoading}
+          isLoading={!_hasHydrated || isLoading}
           isFirstTrack={isFirstTrack()}
           isLastTrack={isLastTrack()}
           hasCurrentTrack={!!currentTrack}

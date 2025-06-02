@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useCallback } from 'react'
 import CurrentTrackInfo from './CurrentTrackInfo'
 import ProgressBar from './ProgressBar'
 import PlayerControls from './PlayerControls'
 import VolumeControl from './VolumeControl'
 import type { Track, Album } from '@/store/playerStore'
+import { usePlayerStore } from '@/store/playerStore'
 
 interface PlayerBarProps {
   audioRef: React.RefObject<HTMLAudioElement | null>
@@ -42,48 +43,60 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
   handleVolumeChange,
   isMobile,
 }) => {
-  const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(0)
+  const currentTime = usePlayerStore(state => state.currentTime)
+  const duration = usePlayerStore(state => state.duration)
+  const setCurrentTimeStore = usePlayerStore(state => state.setCurrentTime)
+  const setDurationStore = usePlayerStore(state => state.setDuration)
+  const justRehydrated = usePlayerStore(state => state.justRehydrated)
+
+  // Define the event handler as a useCallback to ensure it has a stable reference
+  // and to correctly remove it in the cleanup function.
+  const handleEmptiedPlayerBar = useCallback(() => {
+    console.log('🧹 PlayerBar Event (Emptied): Resetting duration.');
+    // We should NOT reset currentTime here as it might be rehydrated.
+    // currentTime should be reset by specific actions like new track selection.
+    setDurationStore(0);
+  }, [setDurationStore]);
 
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
 
     const updateLocalTime = () => {
+      // If the store indicates we just rehydrated, don't update currentTime from the audio element yet.
+      // Let index.tsx handle restoring currentTime from the store first.
+      if (usePlayerStore.getState().justRehydrated) { 
+        // console.log('[PlayerBar updateLocalTime] Skipping update, justRehydrated is true.');
+        return;
+      }
       if (!isNaN(audio.currentTime)) {
-        setCurrentTime(audio.currentTime)
+        setCurrentTimeStore(audio.currentTime)
       }
     }
     const updateLocalDuration = () => {
       if (!isNaN(audio.duration)) {
-        setDuration(audio.duration)
+        setDurationStore(audio.duration)
       } else {
-        setDuration(0) // Reset if duration is not a number (e.g. new track loading)
+        setDurationStore(0) // Reset if duration is not a number (e.g. new track loading)
       }
     }
 
-    // Initial sync and event listeners
-    updateLocalDuration() // Sync duration on mount/track change
-    updateLocalTime()     // Sync time on mount/track change
+    // Event listeners will handle syncing. Removed direct calls to updateLocalTime() and updateLocalDuration().
+    // updateLocalDuration() // REMOVED: Sync duration on mount/track change
+    // updateLocalTime()     // REMOVED: Sync time on mount/track change
 
     audio.addEventListener('timeupdate', updateLocalTime)
     audio.addEventListener('loadedmetadata', updateLocalDuration)
     audio.addEventListener('durationchange', updateLocalDuration); // Handle duration changes (e.g. for live streams or when metadata isn't fully loaded initially)
-    audio.addEventListener('emptied', () => { // Reset when src changes and audio is emptied
-        setCurrentTime(0);
-        setDuration(0);
-    });
+    audio.addEventListener('emptied', handleEmptiedPlayerBar); // Use the named handler
 
     return () => {
       audio.removeEventListener('timeupdate', updateLocalTime)
       audio.removeEventListener('loadedmetadata', updateLocalDuration)
-      audio.removeEventListener('durationchange', updateLocalDuration);
-      audio.removeEventListener('emptied', () => {
-        setCurrentTime(0);
-        setDuration(0);
-    });
+      audio.removeEventListener('durationchange', updateLocalDuration)
+      audio.removeEventListener('emptied', handleEmptiedPlayerBar); // Use the same named handler for removal
     }
-  }, [audioRef, currentTrack]) // Re-run when audioRef or currentTrack changes
+  }, [audioRef, currentTrack, setCurrentTimeStore, setDurationStore, handleEmptiedPlayerBar, justRehydrated]) // Added justRehydrated to dependencies
 
   if (isMobile) {
     return (

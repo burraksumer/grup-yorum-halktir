@@ -1,10 +1,14 @@
-import { create } from 'zustand';
+import { create, type StoreApi } from 'zustand';
+import { persist, createJSONStorage, type PersistOptions, type StateStorage, type StorageValue } from 'zustand/middleware';
 
 export interface Track {
   track: number;
   title: string;
   file: string;
   disc?: number;
+  shouldAutoPlay: boolean;
+  currentTime: number;
+  duration: number;
 }
 
 export interface Album {
@@ -24,10 +28,12 @@ export interface AlbumsData {
   albums: Album[];
 }
 
-interface PlayerState {
+export interface PlayerState {
   // Initial simple states
   volume: number[];
   mobileView: 'albums' | 'tracks';
+  _hasHydrated: boolean; // For tracking hydration status
+  justRehydrated: boolean; // Flag to indicate if current track was just rehydrated
 
   // Placeholder for other states - will be added progressively
   albumsData: AlbumsData | null;
@@ -35,10 +41,12 @@ interface PlayerState {
   currentTrack: Track | null;
   isPlaying: boolean;
   isLoading: boolean;
-  shouldAutoPlay: boolean; // Added for managing auto play behavior
+  shouldAutoPlay: boolean;
+  currentTime: number;
+  duration: number;
 
   // --- Actions ---
-  fetchAlbumsAndSetInitialTrack: () => Promise<void>; // minioPublicUrl removed
+  fetchAlbumsAndSetInitialTrack: () => Promise<void>;
   setVolume: (volume: number[]) => void;
   setMobileView: (view: 'albums' | 'tracks') => void;
 
@@ -48,210 +56,301 @@ interface PlayerState {
   setCurrentTrack: (track: Track, autoPlay?: boolean) => void;
   togglePlay: () => void;
   setIsLoading: (loading: boolean) => void;
-  setShouldAutoPlay: (autoPlay: boolean) => void; // Added for managing auto play behavior
-  setIsPlaying: (playing: boolean) => void; // Added action to directly set playing state
+  setShouldAutoPlay: (autoPlay: boolean) => void;
+  setIsPlaying: (playing: boolean) => void;
   playNextTrack: () => void;
   playPrevTrack: () => void;
+  setCurrentTime: (time: number) => void;
+  setDuration: (duration: number) => void;
+  handleProgressChange: (newTime: number) => void;
+  setHasHydrated: (hydrated: boolean) => void; // Action to set hydration status
+  setJustRehydrated: (rehydrated: boolean) => void; // Action for the flag
 }
 
-export const usePlayerStore = create<PlayerState>((set, get) => ({
-  // Initial values
-  volume: (typeof window !== 'undefined' && localStorage.getItem('grup-yorum-volume'))
-    ? [parseInt(localStorage.getItem('grup-yorum-volume')!, 10)]
-    : [75],
-  mobileView: 'albums',
-  
-  // Placeholder initial values - will be refined
-  albumsData: null,
-  selectedAlbum: null,
-  currentTrack: null,
-  isPlaying: false,
-  isLoading: true, // Set to true initially until albums load
-  shouldAutoPlay: false,
+// Define the shape of the persisted state explicitly for partialize
+type PersistedPlayerState = Pick<PlayerState, 'currentTrack' | 'currentTime' | 'volume'>;
 
-  // --- Actions ---
-  fetchAlbumsAndSetInitialTrack: async () => { // minioPublicUrl removed
-    console.log('🎵 Zustand: Fetching albums and setting initial track...');
-    set({ isLoading: true });
-    try {
-      const response = await fetch('/all_albums_metadata.json');
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data: AlbumsData = await response.json();
-      set({ albumsData: data });
-      if (data.albums.length > 0) {
-        const firstAlbum = data.albums[0];
-        set({ selectedAlbum: firstAlbum });
-        if (firstAlbum.tracks.length > 0) {
-          const firstTrack = firstAlbum.tracks[0];
-          // Do not autoPlay the very first track on load, just set it.
-          // The audio URL will be set by a useEffect in the component based on this currentTrack.
-          set({ currentTrack: firstTrack, isLoading: false, shouldAutoPlay: false }); 
-          console.log('🎵 Zustand: Initial album and track set:', firstAlbum.title, firstTrack.title);
+export const usePlayerStore = create<PlayerState>()(
+  persist(
+    (set, get) => ({
+      // Initial values
+      volume: [typeof window !== 'undefined' ? parseInt(localStorage.getItem('grup-yorum-volume') || '75', 10) : 75],
+      mobileView: 'albums',
+      _hasHydrated: false,
+      justRehydrated: false, // Initialize flag
+      
+      albumsData: null,
+      selectedAlbum: null,
+      currentTrack: null,
+      isPlaying: false,
+      isLoading: true, // Start with loading true until albums are fetched or hydration occurs
+      shouldAutoPlay: false,
+      currentTime: 0,
+      duration: 0,
+
+      // --- Actions ---
+      setHasHydrated: (hydrated: boolean) => set({ _hasHydrated: hydrated }),
+      setJustRehydrated: (rehydrated: boolean) => set({ justRehydrated: rehydrated }),
+      fetchAlbumsAndSetInitialTrack: async () => { 
+        console.log('🎵 Zustand: Fetching albums...');
+        const { currentTrack: existingCurrentTrack, justRehydrated: isJustRehydrated } = get(); 
+        
+        if (!existingCurrentTrack && !isJustRehydrated) { // Only set loading if no track AND not in rehydration phase expecting a track
+            set({ isLoading: true });
+        }
+
+        try {
+          const response = await fetch('/all_albums_metadata.json');
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+          const data: AlbumsData = await response.json();
+          
+          // Re-evaluate currentTrack and selectedAlbum after await, as they might have been set by rehydration
+          const { currentTrack: currentTrackAfterFetch, selectedAlbum: selectedAlbumAfterFetch, justRehydrated: isStillJustRehydrated } = get();
+          let newCurrentTrack = currentTrackAfterFetch;
+          let newSelectedAlbum = selectedAlbumAfterFetch;
+
+          if (!newCurrentTrack && data.albums.length > 0) {
+            const firstAlbum = data.albums[0];
+            newSelectedAlbum = firstAlbum;
+            if (firstAlbum.tracks.length > 0) {
+              newCurrentTrack = firstAlbum.tracks[0];
+              console.log('🎵 Zustand: Initial album and track set (no persisted/existing track):', firstAlbum.title, newCurrentTrack.title);
+            }
+          } else if (newCurrentTrack && data.albums.length > 0) {
+            const trackAlbum = data.albums.find(album => 
+                album.tracks.some(track => track.file === newCurrentTrack!.file)
+            );
+            if (trackAlbum && newSelectedAlbum?.id !== trackAlbum.id) {
+                console.log('🎵 Zustand (Fetch): Aligning selected album for existing/persisted track:', trackAlbum.title);
+                newSelectedAlbum = trackAlbum;
+            }
+          }
+          
+          // isLoading logic: 
+          // - If we are in a state where a track was just rehydrated, loadedmetadata will handle setting isLoading to false.
+          // - Otherwise, isLoading is false if we have a newCurrentTrack, true otherwise.
+          const finalIsLoading = isStillJustRehydrated && newCurrentTrack ? true : !newCurrentTrack;
+
+          set({ 
+            albumsData: data, 
+            currentTrack: newCurrentTrack,
+            selectedAlbum: newSelectedAlbum,
+            isLoading: finalIsLoading 
+          });
+
+        } catch (error) {
+          console.error('❌ Zustand: Error loading albums:', error);
+          // If an error occurs, and we are not in a rehydrated state with a track, set loading to false.
+          if (!(get().justRehydrated && get().currentTrack)) {
+            set({ isLoading: false }); 
+          }
+        }
+      },
+      setVolume: (newVolume: number[]) => {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('grup-yorum-volume', newVolume[0].toString());
+        }
+        set({ volume: newVolume });
+      },
+      setMobileView: (view: 'albums' | 'tracks') => set({ mobileView: view }),
+      setAlbumsData: (data: AlbumsData) => set({ albumsData: data }),
+      setSelectedAlbum: (album: Album) => {
+        console.log('🎵 Zustand: Album selected for viewing:', album.title);
+        set({ selectedAlbum: album });
+      },
+      setCurrentTrack: (track: Track, autoPlay: boolean = true) => {
+        const currentTrackFile = get().currentTrack?.file;
+        const isCurrentlyPlaying = get().isPlaying;
+
+        if (currentTrackFile === track.file) {
+          console.log('🎵 Zustand: Same track selected.');
+          if (isCurrentlyPlaying && !autoPlay) { 
+              get().togglePlay(); 
+          } else if (!isCurrentlyPlaying && autoPlay) { 
+              get().togglePlay();
+          } else if (isCurrentlyPlaying && autoPlay) {
+            if(!get().shouldAutoPlay) set({ shouldAutoPlay: true });
+          }
+          return;
+        }
+        
+        console.log('🎵 Zustand: Track selected:', track.title, 'autoPlay:', autoPlay);
+        set({ 
+          currentTrack: track, 
+          shouldAutoPlay: autoPlay, 
+          isPlaying: false, 
+          isLoading: true 
+        });
+
+        const albums = get().albumsData?.albums;
+        if (albums) {
+            const trackAlbum = albums.find(a =>
+                a.tracks.some(t => t.file === track.file)
+            );
+            if (trackAlbum && (trackAlbum.id !== get().selectedAlbum?.id || !get().selectedAlbum)) {
+                console.log('🎵 Zustand: Setting selected album for the new track:', trackAlbum.title);
+                set({ selectedAlbum: trackAlbum });
+            }
+        }
+      },
+      togglePlay: () => {
+        if (!get().currentTrack) {
+          console.log('🎵 Zustand: Toggle play ignored, no current track.');
+          return;
+        }
+        const newIsPlaying = !get().isPlaying;
+        set({ 
+          isPlaying: newIsPlaying,
+          isLoading: newIsPlaying ? true : false,
+          shouldAutoPlay: newIsPlaying ? true : get().shouldAutoPlay 
+        }); 
+        console.log(`🎵 Zustand: Toggle play. New isPlaying: ${newIsPlaying}`);
+      },
+      setIsLoading: (loading: boolean) => {
+        set({ isLoading: loading });
+      },
+      setShouldAutoPlay: (autoPlay: boolean) => {
+        set({ shouldAutoPlay: autoPlay });
+      },
+      setIsPlaying: (playing: boolean) => {
+        set({
+          isPlaying: playing,
+          // isLoading is managed by dedicated events/actions like togglePlay,
+          // audio events (playing, loadstart, waiting, canplay, error) via setIsLoadingStore
+        });
+      },
+      setCurrentTime: (time: number) => {
+        console.log(`🎵 Zustand: setCurrentTime called with: ${time}. Current currentTime: ${get().currentTime}`);
+        // Only update if the new time is meaningfully different to avoid excessive re-renders/log spam
+        if (Math.abs(get().currentTime - time) > 0.001 || time === 0) {
+          set({ currentTime: time });
         } else {
-          set({ isLoading: false });
-          console.log('🎵 Zustand: First album has no tracks.');
+          // console.log(`[Zustand setCurrentTime] Skipped update, time ${time} is too close to ${get().currentTime}`);
         }
-      } else {
-        set({ isLoading: false });
-        console.log('🎵 Zustand: No albums found in metadata.');
-      }
-    } catch (error) {
-      console.error('❌ Zustand: Error loading albums:', error);
-      set({ isLoading: false });
-    }
-  },
-  setVolume: (newVolume) => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('grup-yorum-volume', newVolume[0].toString());
-      // Note: Updating audioRef.current.volume will be handled in the component via useEffect
-    }
-    set({ volume: newVolume });
-  },
-  setMobileView: (view) => set({ mobileView: view }),
+      },
+      setDuration: (duration: number) => set({ duration: duration }),
+      handleProgressChange: (newTime: number) => {
+        console.log(`🎵 Zustand: handleProgressChange called with: ${newTime}. Current currentTime: ${get().currentTime}`);
+        // Corresponds to user dragging progress bar
+        // We expect audioRef.current.currentTime to be set first in index.tsx, then this updates store
+        set({ currentTime: newTime }); 
+      },
+      playNextTrack: () => {
+        const { currentTrack, albumsData, setCurrentTrack: setCurrentTrackAction } = get();
+        if (!albumsData || !currentTrack) return;
 
-  // Placeholder actions - to be implemented
-  setAlbumsData: (data) => set({ albumsData: data }),
-  setSelectedAlbum: (album) => {
-    console.log('🎵 Zustand: Album selected for viewing:', album.title);
-    set({ selectedAlbum: album });
-    // Optional: if an album is selected for viewing, and no track is current, select its first track?
-    // Or if a track is playing from another album, do we stop it or change it?
-    // For now, just sets selectedAlbum for viewing. Track selection is separate.
-  },
-  setCurrentTrack: (track, autoPlay = true) => {
-    const currentTrackFile = get().currentTrack?.file;
-    const isCurrentlyPlaying = get().isPlaying;
-
-    if (currentTrackFile === track.file) {
-      console.log('🎵 Zustand: Same track selected.');
-      // If the same track is selected, toggle play/pause
-      if (isCurrentlyPlaying && !autoPlay) { // Explicitly don't autoPlay (e.g. user clicked to pause)
-          get().togglePlay(); 
-      } else if (!isCurrentlyPlaying && autoPlay) { // Explicitly autoPlay (e.g. user clicked to play paused track)
-          get().togglePlay();
-      } else if (isCurrentlyPlaying && autoPlay) {
-        // if it is already playing and autoPlay is true (e.g. from next/prev), ensure it continues
-        // No state change needed here if already playing, src will be the same.
-        // For safety, ensure shouldAutoPlay is true if it wasn't
-        if(!get().shouldAutoPlay) set({ shouldAutoPlay: true });
-      }
-      return;
-    }
-    
-    console.log('🎵 Zustand: Track selected:', track.title, 'autoPlay:', autoPlay);
-    // When a new track is set, it implies it should play if autoPlay is true.
-    // isLoading will be set to true, and isPlaying to false until the audio actually starts.
-    set({ 
-      currentTrack: track, 
-      shouldAutoPlay: autoPlay, 
-      isPlaying: false, // Will be set to true by audio event 'playing'
-      isLoading: true 
-    });
-
-    // If the track belongs to an album different from the currently *selected* (for viewing) album,
-    // update the selectedAlbum to the track's album.
-    const albums = get().albumsData?.albums;
-    if (albums) {
-        const trackAlbum = albums.find(album =>
-            album.tracks.some(t => t.file === track.file)
+        let playingAlbum = albumsData.albums.find(album => 
+            album.tracks.some(track => track.file === currentTrack.file)
         );
-        // Also update selectedAlbum if no album is selected yet
-        if (trackAlbum && (trackAlbum.id !== get().selectedAlbum?.id || !get().selectedAlbum)) {
-            console.log('🎵 Zustand: Setting selected album for the new track:', trackAlbum.title);
-            set({ selectedAlbum: trackAlbum });
+
+        if (!playingAlbum) {
+            console.warn("Couldn't find album for current track to play next.");
+            return;
         }
-    }
-  },
-  togglePlay: () => {
-    if (!get().currentTrack) {
-      console.log('🎵 Zustand: Toggle play ignored, no current track.');
-      return;
-    }
-    const newIsPlaying = !get().isPlaying;
-    set({ 
-      isPlaying: newIsPlaying,
-      // If we are now attempting to play, set isLoading to true.
-      // The 'playing' event from audio element will set isLoading to false.
-      // If we are pausing, isLoading should be false.
-      isLoading: newIsPlaying ? true : false,
-      // shouldAutoPlay is not directly managed by togglePlay itself.
-      // It's a flag for scenarios like track changes or auto-next.
-      // However, if user explicitly hits play, we might infer they want it to continue if possible.
-      // For now, let togglePlay focus on isPlaying and isLoading for the immediate action.
-      // If a track is paused and user hits play, shouldAutoPlay might become relevant if track ends etc.
-      // but not for the immediate play/pause action.
-      // Let's ensure that if we start playing, shouldAutoPlay becomes true so that if the track ends, next one plays.
-      shouldAutoPlay: newIsPlaying ? true : get().shouldAutoPlay // Preserve shouldAutoPlay if pausing, set to true if playing
-    }); 
-    console.log(`🎵 Zustand: Toggle play. New isPlaying: ${newIsPlaying}`);
-  },
-  setIsLoading: (loading) => {
-    // console.log('🎵 Zustand: setIsLoading:', loading);
-    set({ isLoading: loading });
-  },
-  setShouldAutoPlay: (autoPlay) => {
-    // console.log('🎵 Zustand: setShouldAutoPlay:', autoPlay);
-    set({ shouldAutoPlay: autoPlay });
-  },
-  setIsPlaying: (playing) => {
-    set(state => ({ 
-      isPlaying: playing,
-      isLoading: false 
-    }));
-  },
-  playNextTrack: () => {
-    const { currentTrack, albumsData } = get();
-    if (!albumsData || !currentTrack) return;
 
-    // Determine the album of the current track
-    let playingAlbum = albumsData.albums.find(album => 
-        album.tracks.some(track => track.file === currentTrack.file)
-    );
+        const currentIndex = playingAlbum.tracks.findIndex(t => t.file === currentTrack.file);
+        if (currentIndex < playingAlbum.tracks.length - 1) {
+          const nextTrack = playingAlbum.tracks[currentIndex + 1];
+          console.log('🎵 Zustand: Playing next track:', nextTrack.title);
+          setCurrentTrackAction(nextTrack, true);
+        } else {
+          console.log('🎵 Zustand: Last track in album, stopping playback.');
+          set({isPlaying: false, shouldAutoPlay: false}); 
+        }
+      },
+      playPrevTrack: () => {
+        const { currentTrack, albumsData, setCurrentTrack: setCurrentTrackAction } = get();
+        if (!albumsData || !currentTrack) return;
 
-    if (!playingAlbum) {
-        console.warn("Couldn't find album for current track to play next.");
-        return;
-    }
+        let playingAlbum = albumsData.albums.find(album => 
+            album.tracks.some(track => track.file === currentTrack.file)
+        );
 
-    const currentIndex = playingAlbum.tracks.findIndex(t => t.file === currentTrack.file);
-    if (currentIndex < playingAlbum.tracks.length - 1) {
-      const nextTrack = playingAlbum.tracks[currentIndex + 1];
-      console.log('🎵 Zustand: Playing next track:', nextTrack.title);
-      get().setCurrentTrack(nextTrack, true); // autoPlay next track
-    } else {
-      console.log('🎵 Zustand: Last track in album, stopping playback.');
-      set({isPlaying: false, shouldAutoPlay: false}); // Stop playing and don't autoPlay further
-    }
-  },
-  playPrevTrack: () => {
-    const { currentTrack, albumsData } = get();
-    if (!albumsData || !currentTrack) return;
+        if (!playingAlbum) {
+            console.warn("Couldn't find album for current track to play previous.");
+            return;
+        }
 
-    let playingAlbum = albumsData.albums.find(album => 
-        album.tracks.some(track => track.file === currentTrack.file)
-    );
-
-    if (!playingAlbum) {
-        console.warn("Couldn't find album for current track to play previous.");
-        return;
-    }
-
-    const currentIndex = playingAlbum.tracks.findIndex(t => t.file === currentTrack.file);
-    if (currentIndex > 0) {
-      const prevTrack = playingAlbum.tracks[currentIndex - 1];
-      console.log('🎵 Zustand: Playing previous track:', prevTrack.title);
-      get().setCurrentTrack(prevTrack, true); // autoPlay previous track
-    } else {
-        console.log('🎵 Zustand: First track in album, no previous track.');
-    }
-  },
-}));
+        const currentIndex = playingAlbum.tracks.findIndex(t => t.file === currentTrack.file);
+        if (currentIndex > 0) {
+          const prevTrack = playingAlbum.tracks[currentIndex - 1];
+          console.log('🎵 Zustand: Playing previous track:', prevTrack.title);
+          setCurrentTrackAction(prevTrack, true); 
+        } else {
+            console.log('🎵 Zustand: First track in album, no previous track.');
+        }
+      },
+    }),
+    {
+      name: 'grup-yorum-player-storage',
+      storage: createJSONStorage<PersistedPlayerState>(() => localStorage),
+      partialize: (state: PlayerState): PersistedPlayerState => ({
+        currentTrack: state.currentTrack,
+        currentTime: state.currentTime,
+        volume: state.volume,
+      }),
+      onRehydrateStorage: (state?: PlayerState) => {
+        console.log('🎵 Zustand: Hydration from localStorage has started/is about to start. Initial state for listener:', state);
+        return (hydratedState?: PlayerState, error?: unknown) => {
+          if (error) {
+            console.error('❌ Zustand: An error occurred during rehydration', error);
+          } else {
+            console.log('✅ Zustand: Rehydration callback executed. Hydrated state:', hydratedState);
+            if (hydratedState) {
+              if (hydratedState.currentTrack) { 
+                console.log('🎵 Zustand (Rehydrate CB): Track rehydrated. Setting states.');
+                hydratedState.setIsPlaying(false);
+                hydratedState.setShouldAutoPlay(false);
+                hydratedState.setIsLoading(true); 
+                hydratedState.setJustRehydrated(true);
+              } else {
+                hydratedState.setIsLoading(false); 
+                hydratedState.setJustRehydrated(false);
+              }
+            }
+          }
+        };
+      },
+      onFinishHydration: (state?: PlayerState) => {
+        if (state && typeof state.setHasHydrated === 'function') {
+          state.setHasHydrated(true);
+          console.log('✅ Zustand: Hydration fully finished (onFinishHydration). _hasHydrated set to true.');
+        } else {
+          console.warn('⚠️ Zustand (onFinishHydration): state or setHasHydrated not available. State:', state);
+        }
+      }
+    } as PersistOptions<PlayerState, PersistedPlayerState>
+  )
+);
 
 // Log store changes for debugging (optional)
 if (process.env.NODE_ENV === 'development') {
+  // Store the previous state to compare
+  let previousState = usePlayerStore.getState();
+
   usePlayerStore.subscribe(
-    (currentState) => console.log('Zustand state changed:', { current: currentState })
+    (currentState) => {
+      const changedState: Partial<PlayerState> = {};
+      let hasChanges = false;
+      for (const key in currentState) {
+        if (Object.prototype.hasOwnProperty.call(currentState, key)) {
+          const typedKey = key as keyof PlayerState;
+          if (previousState[typedKey] !== currentState[typedKey]) {
+            // For objects/arrays, a shallow compare might not be enough, but good for primitives
+            // For functions, this will always show changed if they are re-created, which is normal for actions
+            if (typeof currentState[typedKey] !== 'function') {
+                changedState[typedKey] = currentState[typedKey] as any;
+                hasChanges = true;
+            }
+          }
+        }
+      }
+      if (hasChanges) {
+        console.log('Zustand state changed. Diff (non-function props):', changedState, 'Full new state:', currentState);
+      } else {
+        // console.log('Zustand state changed (actions or no data change):', currentState);
+      }
+      previousState = { ...currentState }; // Update previous state for next comparison
+    }
   );
 } 
