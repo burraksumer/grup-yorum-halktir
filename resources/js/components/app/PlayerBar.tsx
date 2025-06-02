@@ -47,12 +47,8 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
   const duration = usePlayerStore(state => state.duration)
   const setCurrentTimeStore = usePlayerStore(state => state.setCurrentTime)
   const setDurationStore = usePlayerStore(state => state.setDuration)
-  const justRehydrated = usePlayerStore(state => state.justRehydrated)
 
-  // Define the event handler as a useCallback to ensure it has a stable reference
-  // and to correctly remove it in the cleanup function.
   const handleEmptiedPlayerBar = useCallback(() => {
-    console.log('🧹 PlayerBar Event (Emptied): Resetting duration.');
     // We should NOT reset currentTime here as it might be rehydrated.
     // currentTime should be reset by specific actions like new track selection.
     setDurationStore(0);
@@ -63,10 +59,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
     if (!audio) return
 
     const updateLocalTime = () => {
-      // If the store indicates we just rehydrated, don't update currentTime from the audio element yet.
-      // Let index.tsx handle restoring currentTime from the store first.
       if (usePlayerStore.getState().justRehydrated) { 
-        // console.log('[PlayerBar updateLocalTime] Skipping update, justRehydrated is true.');
         return;
       }
       if (!isNaN(audio.currentTime)) {
@@ -77,26 +70,26 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
       if (!isNaN(audio.duration)) {
         setDurationStore(audio.duration)
       } else {
-        setDurationStore(0) // Reset if duration is not a number (e.g. new track loading)
+        setDurationStore(0) 
       }
     }
 
-    // Event listeners will handle syncing. Removed direct calls to updateLocalTime() and updateLocalDuration().
-    // updateLocalDuration() // REMOVED: Sync duration on mount/track change
-    // updateLocalTime()     // REMOVED: Sync time on mount/track change
-
     audio.addEventListener('timeupdate', updateLocalTime)
     audio.addEventListener('loadedmetadata', updateLocalDuration)
-    audio.addEventListener('durationchange', updateLocalDuration); // Handle duration changes (e.g. for live streams or when metadata isn't fully loaded initially)
-    audio.addEventListener('emptied', handleEmptiedPlayerBar); // Use the named handler
+    audio.addEventListener('durationchange', updateLocalDuration);
+    audio.addEventListener('emptied', handleEmptiedPlayerBar);
 
     return () => {
       audio.removeEventListener('timeupdate', updateLocalTime)
       audio.removeEventListener('loadedmetadata', updateLocalDuration)
       audio.removeEventListener('durationchange', updateLocalDuration)
-      audio.removeEventListener('emptied', handleEmptiedPlayerBar); // Use the same named handler for removal
+      audio.removeEventListener('emptied', handleEmptiedPlayerBar);
     }
-  }, [audioRef, currentTrack, setCurrentTimeStore, setDurationStore, handleEmptiedPlayerBar, justRehydrated]) // Added justRehydrated to dependencies
+    // currentTrack is not strictly needed here as a dependency if its change triggers 
+    // other effects that re-evaluate or re-attach listeners. 
+    // However, keeping it can ensure listeners are fresh if the track object identity changes.
+    // justRehydrated is also not directly used in this effect's body, but its change should trigger re-evaluation due to updateLocalTime logic.
+  }, [audioRef, currentTrack, setCurrentTimeStore, setDurationStore, handleEmptiedPlayerBar]) 
 
   if (isMobile) {
     return (
