@@ -11,6 +11,7 @@ import MobileNavigation from '@/components/app/MobileNavigation'
 import MobileHeader from '@/components/app/MobileHeader'
 import DesktopHeader from '@/components/app/DesktopHeader'
 import { usePlayerStore, Album, Track /*, AlbumsData*/ } from '@/store/playerStore'
+import { useUserStore } from '@/store/userStore'
 
 interface PageProps {
   minioPublicUrl: string
@@ -43,13 +44,17 @@ export default function Index({ minioPublicUrl }: PageProps) {
   const handleProgressChangeStoreAction = usePlayerStore(state => state.handleProgressChange);
   const setJustRehydratedStore = usePlayerStore(state => state.setJustRehydrated);
 
+  // User store actions
+  const checkAuthStatus = useUserStore(state => state.checkAuthStatus);
+
   const isMobile = useIsMobile()
   const audioRef = useRef<HTMLAudioElement>(null)
 
   // Load albums metadata - Now handled by Zustand action
   useEffect(() => {
     fetchAlbumsAndSetInitialTrackStore();
-  }, [fetchAlbumsAndSetInitialTrackStore]);
+    checkAuthStatus();
+  }, [fetchAlbumsAndSetInitialTrackStore, checkAuthStatus]);
 
   // Effect 1: Handles setting the audio source, volume, and initial play for new tracks
   useEffect(() => {
@@ -354,6 +359,8 @@ export default function Index({ minioPublicUrl }: PageProps) {
                 {/* Track List */}
                 <TrackList 
                   tracks={selectedAlbum.tracks}
+                  albumId={selectedAlbum.id}
+                  albumSlug={selectedAlbum.slug}
                   currentTrack={currentTrack}
                   isPlaying={isPlaying}
                   isLoading={isLoading}
@@ -445,6 +452,8 @@ export default function Index({ minioPublicUrl }: PageProps) {
                     <ScrollArea className="h-[calc(100vh-20rem)]">
                       <TrackList 
                         tracks={selectedAlbum.tracks}
+                        albumId={selectedAlbum.id}
+                        albumSlug={selectedAlbum.slug}
                         currentTrack={currentTrack}
                         isPlaying={isPlaying}
                         isLoading={isLoading}

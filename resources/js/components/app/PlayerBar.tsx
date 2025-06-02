@@ -3,6 +3,7 @@ import CurrentTrackInfo from './CurrentTrackInfo'
 import ProgressBar from './ProgressBar'
 import PlayerControls from './PlayerControls'
 import VolumeControl from './VolumeControl'
+import LikeButton from './LikeButton'
 import type { Track, Album } from '@/store/playerStore'
 import { usePlayerStore } from '@/store/playerStore'
 
@@ -96,12 +97,22 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
       <footer className="border-t bg-card p-4">
         <audio ref={audioRef} preload="metadata" />
         <div className="flex flex-col gap-3">
-          <CurrentTrackInfo
-            currentTrack={currentTrack}
-            playingAlbum={playingAlbum}
-            minioPublicUrl={minioPublicUrl}
-            isMobile={true}
-          />
+          <div className="flex items-center justify-between">
+            <CurrentTrackInfo
+              currentTrack={currentTrack}
+              playingAlbum={playingAlbum}
+              minioPublicUrl={minioPublicUrl}
+              isMobile={true}
+              className="flex-grow min-w-0"
+            />
+            {currentTrack && playingAlbum && (
+              <LikeButton
+                albumId={playingAlbum.id}
+                trackNumber={currentTrack.track}
+                className="ml-2 flex-shrink-0"
+              />
+            )}
+          </div>
           {currentTrack && (
             <ProgressBar
               currentTime={currentTime}
@@ -137,8 +148,9 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
           currentTrack={currentTrack}
           playingAlbum={playingAlbum}
           minioPublicUrl={minioPublicUrl}
+          className="min-w-0"
         />
-        <div className="flex flex-col items-center flex-1">
+        <div className="flex flex-col items-center flex-1 mx-4">
           <div className="flex items-center gap-2 mb-2">
             <PlayerControls
               onPlayPause={togglePlayPause}
@@ -150,13 +162,20 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
               isLastTrack={isLastTrack}
               hasCurrentTrack={hasCurrentTrack}
             />
+            {currentTrack && playingAlbum && (
+              <LikeButton
+                albumId={playingAlbum.id}
+                trackNumber={currentTrack.track}
+                className="ml-2"
+              />
+            )}
           </div>
           {currentTrack && (
             <ProgressBar
               currentTime={currentTime}
               duration={duration}
               onProgressChange={onProgressChange}
-              className="max-w-md"
+              className="w-full max-w-md"
             />
           )}
         </div>

@@ -6,6 +6,7 @@ export interface Track {
   title: string;
   file: string;
   disc?: number;
+  albumSlug?: string;
   shouldAutoPlay: boolean;
   currentTime: number;
   duration: number;
@@ -111,14 +112,19 @@ export const usePlayerStore = create<PlayerState>()(
             const firstAlbum = data.albums[0];
             newSelectedAlbum = firstAlbum;
             if (firstAlbum.tracks.length > 0) {
-              newCurrentTrack = firstAlbum.tracks[0];
+              newCurrentTrack = { ...firstAlbum.tracks[0], albumSlug: firstAlbum.slug };
             }
           } else if (newCurrentTrack && data.albums.length > 0) {
-            const trackAlbum = data.albums.find(album => 
+            const trackAlbumForCurrent = data.albums.find(album => 
                 album.tracks.some(track => track.file === newCurrentTrack!.file)
             );
-            if (trackAlbum && newSelectedAlbum?.id !== trackAlbum.id) {
-                newSelectedAlbum = trackAlbum;
+            if (trackAlbumForCurrent) {
+                if (!newCurrentTrack.albumSlug) {
+                    newCurrentTrack.albumSlug = trackAlbumForCurrent.slug;
+                }
+                if (newSelectedAlbum?.id !== trackAlbumForCurrent.id) {
+                    newSelectedAlbum = trackAlbumForCurrent;
+                }
             }
           }
           
@@ -151,9 +157,18 @@ export const usePlayerStore = create<PlayerState>()(
       },
       setCurrentTrack: (track: Track, autoPlay: boolean = true, keepCurrentSelectedAlbum: boolean = false) => {
         const currentTrackFile = get().currentTrack?.file;
+        const currentTrackAlbumSlug = get().currentTrack?.albumSlug;
         const isCurrentlyPlaying = get().isPlaying;
 
-        if (currentTrackFile === track.file) {
+        const albums = get().albumsData?.albums;
+        let newTrackAlbum: Album | undefined;
+        if (albums) {
+            newTrackAlbum = albums.find(a => a.tracks.some(t => t.file === track.file));
+        }
+
+        const trackWithAlbumSlug = newTrackAlbum ? { ...track, albumSlug: newTrackAlbum.slug } : track;
+
+        if (currentTrackFile === trackWithAlbumSlug.file && currentTrackAlbumSlug === trackWithAlbumSlug.albumSlug) {
           if (isCurrentlyPlaying && !autoPlay) { 
               get().togglePlay(); 
           } else if (!isCurrentlyPlaying && autoPlay) { 
@@ -163,22 +178,21 @@ export const usePlayerStore = create<PlayerState>()(
         }
         
         set({ 
-          currentTrack: track, 
+          currentTrack: trackWithAlbumSlug,
           shouldAutoPlay: autoPlay, 
           isPlaying: false, 
           isLoading: true 
         });
 
         if (!keepCurrentSelectedAlbum) {
-            const albums = get().albumsData?.albums;
-            if (albums) {
-                const trackAlbum = albums.find(a =>
-                    a.tracks.some(t => t.file === track.file)
-                );
-                if (trackAlbum && (trackAlbum.id !== get().selectedAlbum?.id || !get().selectedAlbum)) {
-                    set({ selectedAlbum: trackAlbum });
-                }
+            if (newTrackAlbum && (newTrackAlbum.id !== get().selectedAlbum?.id || !get().selectedAlbum)) {
+                set({ selectedAlbum: newTrackAlbum });
             }
+        } else {
+            // If we are keeping the selected album, but the current track has changed to an album
+            // that is NOT the selected album, we still need to ensure the new currentTrack object
+            // has the correct albumSlug from its actual album (newTrackAlbum), not from the selectedAlbum.
+            // This is already handled by setting `trackWithAlbumSlug` above.
         }
       },
       togglePlay: () => {
@@ -213,12 +227,10 @@ export const usePlayerStore = create<PlayerState>()(
         set({ currentTime: newTime }); 
       },
       playNextTrack: () => {
-        const { currentTrack, albumsData, setCurrentTrack: setCurrentTrackAction } = get();
-        if (!albumsData || !currentTrack) return;
+        const { currentTrack, albumsData, setCurrentTrack: setCurrentTrackAction /*, selectedAlbum*/ } = get();
+        if (!albumsData || !currentTrack || !currentTrack.albumSlug) return;
 
-        const playingAlbum = albumsData.albums.find(album => 
-            album.tracks.some(track => track.file === currentTrack.file)
-        );
+        const playingAlbum = albumsData.albums.find(album => album.slug === currentTrack.albumSlug);
 
         if (!playingAlbum) {
             console.warn("PlayerStore: Couldn't find album for current track to play next.");
@@ -228,18 +240,16 @@ export const usePlayerStore = create<PlayerState>()(
         const currentIndex = playingAlbum.tracks.findIndex(t => t.file === currentTrack.file);
         if (currentIndex < playingAlbum.tracks.length - 1) {
           const nextTrack = playingAlbum.tracks[currentIndex + 1];
-          setCurrentTrackAction(nextTrack, true, true);
+          setCurrentTrackAction({ ...nextTrack, albumSlug: playingAlbum.slug }, true, true); 
         } else {
           set({isPlaying: false, shouldAutoPlay: false}); 
         }
       },
       playPrevTrack: () => {
-        const { currentTrack, albumsData, setCurrentTrack: setCurrentTrackAction } = get();
-        if (!albumsData || !currentTrack) return;
+        const { currentTrack, albumsData, setCurrentTrack: setCurrentTrackAction /*, selectedAlbum*/ } = get();
+        if (!albumsData || !currentTrack || !currentTrack.albumSlug) return;
 
-        const playingAlbum = albumsData.albums.find(album => 
-            album.tracks.some(track => track.file === currentTrack.file)
-        );
+        const playingAlbum = albumsData.albums.find(album => album.slug === currentTrack.albumSlug);
 
         if (!playingAlbum) {
             console.warn("PlayerStore: Couldn't find album for current track to play previous.");
@@ -249,7 +259,7 @@ export const usePlayerStore = create<PlayerState>()(
         const currentIndex = playingAlbum.tracks.findIndex(t => t.file === currentTrack.file);
         if (currentIndex > 0) {
           const prevTrack = playingAlbum.tracks[currentIndex - 1];
-          setCurrentTrackAction(prevTrack, true, true);
+          setCurrentTrackAction({ ...prevTrack, albumSlug: playingAlbum.slug }, true, true);
         }
       },
     }),
