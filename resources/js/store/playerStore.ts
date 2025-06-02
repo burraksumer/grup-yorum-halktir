@@ -1,5 +1,5 @@
-import { create, type StoreApi } from 'zustand';
-import { persist, createJSONStorage, type PersistOptions, type StateStorage, type StorageValue } from 'zustand/middleware';
+import { create } from 'zustand';
+import { persist, createJSONStorage, type PersistOptions } from 'zustand/middleware';
 
 export interface Track {
   track: number;
@@ -214,7 +214,7 @@ export const usePlayerStore = create<PlayerState>()(
         const { currentTrack, albumsData, setCurrentTrack: setCurrentTrackAction } = get();
         if (!albumsData || !currentTrack) return;
 
-        let playingAlbum = albumsData.albums.find(album => 
+        const playingAlbum = albumsData.albums.find(album => 
             album.tracks.some(track => track.file === currentTrack.file)
         );
 
@@ -235,7 +235,7 @@ export const usePlayerStore = create<PlayerState>()(
         const { currentTrack, albumsData, setCurrentTrack: setCurrentTrackAction } = get();
         if (!albumsData || !currentTrack) return;
 
-        let playingAlbum = albumsData.albums.find(album => 
+        const playingAlbum = albumsData.albums.find(album => 
             album.tracks.some(track => track.file === currentTrack.file)
         );
 

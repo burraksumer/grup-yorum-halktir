@@ -1,17 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import React, { useEffect, useRef, useCallback, useMemo } from 'react'
 import { Head } from '@inertiajs/react'
-import { Card, CardContent } from '@/components/ui/card'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
-import { Button } from '@/components/ui/button'
-import { Slider } from '@/components/ui/slider'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Loader2, Music, List, Disc } from 'lucide-react'
 import { useIsMobile } from '@/hooks/use-mobile'
-import ProgressBar from '@/components/app/ProgressBar'
-import PlayerControls from '@/components/app/PlayerControls'
-import VolumeControl from '@/components/app/VolumeControl'
-import CurrentTrackInfo from '@/components/app/CurrentTrackInfo'
 import PlayerBar from '@/components/app/PlayerBar'
 import AlbumDetailHeader from '@/components/app/AlbumDetailHeader'
 import TrackList from '@/components/app/TrackList'
@@ -19,7 +10,7 @@ import AlbumList from '@/components/app/AlbumList'
 import MobileNavigation from '@/components/app/MobileNavigation'
 import MobileHeader from '@/components/app/MobileHeader'
 import DesktopHeader from '@/components/app/DesktopHeader'
-import { usePlayerStore, Album, Track, AlbumsData } from '@/store/playerStore';
+import { usePlayerStore, Album, Track /*, AlbumsData*/ } from '@/store/playerStore'
 
 interface PageProps {
   minioPublicUrl: string
@@ -35,10 +26,8 @@ export default function Index({ minioPublicUrl }: PageProps) {
   const volume = usePlayerStore(state => state.volume);
   const mobileView = usePlayerStore(state => state.mobileView);
   const shouldAutoPlay = usePlayerStore(state => state.shouldAutoPlay);
-  const storeCurrentTime = usePlayerStore(state => state.currentTime); // For restoring currentTime
-  const justRehydrated = usePlayerStore(state => state.justRehydrated); // For restoring currentTime
-  const _hasHydrated = usePlayerStore(state => state._hasHydrated); // For initial loading UI
-  const setDurationStore = usePlayerStore(state => state.setDuration); // To store track duration
+  const _hasHydrated = usePlayerStore(state => state._hasHydrated);
+  const setDurationStore = usePlayerStore(state => state.setDuration);
 
   // Zustand store actions
   const fetchAlbumsAndSetInitialTrackStore = usePlayerStore(state => state.fetchAlbumsAndSetInitialTrack);
@@ -49,19 +38,17 @@ export default function Index({ minioPublicUrl }: PageProps) {
   const togglePlayStore = usePlayerStore(state => state.togglePlay);
   const setIsLoadingStore = usePlayerStore(state => state.setIsLoading);
   const setIsPlayingStore = usePlayerStore(state => state.setIsPlaying);
-  const setShouldAutoPlayStore = usePlayerStore(state => state.setShouldAutoPlay);
   const playNextTrackStore = usePlayerStore(state => state.playNextTrack);
   const playPrevTrackStore = usePlayerStore(state => state.playPrevTrack);
-  const setCurrentTimeStore = usePlayerStore(state => state.setCurrentTime);
   const handleProgressChangeStoreAction = usePlayerStore(state => state.handleProgressChange);
-  const setJustRehydratedStore = usePlayerStore(state => state.setJustRehydrated); // Action for the flag
+  const setJustRehydratedStore = usePlayerStore(state => state.setJustRehydrated);
 
   const isMobile = useIsMobile()
   const audioRef = useRef<HTMLAudioElement>(null)
 
   // Load albums metadata - Now handled by Zustand action
   useEffect(() => {
-    fetchAlbumsAndSetInitialTrackStore(); // minioPublicUrl removed from store action
+    fetchAlbumsAndSetInitialTrackStore();
   }, [fetchAlbumsAndSetInitialTrackStore]);
 
   // Effect 1: Handles setting the audio source, volume, and initial play for new tracks
@@ -97,7 +84,6 @@ export default function Index({ minioPublicUrl }: PageProps) {
       if (!audio.paused) audio.pause();
       setIsLoadingStore(false); 
       setIsPlayingStore(false); 
-    } else if (!albumsData && currentTrack) {
     }
   }, [currentTrack, volume, minioPublicUrl, albumsData, setIsLoadingStore, setIsPlayingStore, shouldAutoPlay]);
 
@@ -177,7 +163,7 @@ export default function Index({ minioPublicUrl }: PageProps) {
       setIsPlayingStore(false); 
       usePlayerStore.getState().playNextTrack();
     }
-    const handleError = (e: Event) => { 
+    const handleError = () => {
       setIsLoadingStore(false); 
       setIsPlayingStore(false); 
     }
@@ -245,7 +231,7 @@ export default function Index({ minioPublicUrl }: PageProps) {
       audio.removeEventListener('stalled', handleStalled);
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
     }
-  }, [audioRef, setIsLoadingStore, setIsPlayingStore, setShouldAutoPlayStore, currentTrack, setDurationStore, setJustRehydratedStore, albumsData, minioPublicUrl])
+  }, [audioRef, setIsLoadingStore, setIsPlayingStore, currentTrack, setDurationStore, setJustRehydratedStore, albumsData, minioPublicUrl]);
 
   const getPlayingAlbum = useCallback(() => {
     if (!currentTrack || !albumsData) return null
