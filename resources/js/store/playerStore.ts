@@ -53,7 +53,7 @@ export interface PlayerState {
   // Placeholder for other actions - will be added progressively
   setAlbumsData: (data: AlbumsData) => void;
   setSelectedAlbum: (album: Album) => void;
-  setCurrentTrack: (track: Track, autoPlay?: boolean) => void;
+  setCurrentTrack: (track: Track, autoPlay?: boolean, keepCurrentSelectedAlbum?: boolean) => void;
   togglePlay: () => void;
   setIsLoading: (loading: boolean) => void;
   setShouldAutoPlay: (autoPlay: boolean) => void;
@@ -149,7 +149,7 @@ export const usePlayerStore = create<PlayerState>()(
       setSelectedAlbum: (album: Album) => {
         set({ selectedAlbum: album });
       },
-      setCurrentTrack: (track: Track, autoPlay: boolean = true) => {
+      setCurrentTrack: (track: Track, autoPlay: boolean = true, keepCurrentSelectedAlbum: boolean = false) => {
         const currentTrackFile = get().currentTrack?.file;
         const isCurrentlyPlaying = get().isPlaying;
 
@@ -169,13 +169,15 @@ export const usePlayerStore = create<PlayerState>()(
           isLoading: true 
         });
 
-        const albums = get().albumsData?.albums;
-        if (albums) {
-            const trackAlbum = albums.find(a =>
-                a.tracks.some(t => t.file === track.file)
-            );
-            if (trackAlbum && (trackAlbum.id !== get().selectedAlbum?.id || !get().selectedAlbum)) {
-                set({ selectedAlbum: trackAlbum });
+        if (!keepCurrentSelectedAlbum) {
+            const albums = get().albumsData?.albums;
+            if (albums) {
+                const trackAlbum = albums.find(a =>
+                    a.tracks.some(t => t.file === track.file)
+                );
+                if (trackAlbum && (trackAlbum.id !== get().selectedAlbum?.id || !get().selectedAlbum)) {
+                    set({ selectedAlbum: trackAlbum });
+                }
             }
         }
       },
@@ -226,7 +228,7 @@ export const usePlayerStore = create<PlayerState>()(
         const currentIndex = playingAlbum.tracks.findIndex(t => t.file === currentTrack.file);
         if (currentIndex < playingAlbum.tracks.length - 1) {
           const nextTrack = playingAlbum.tracks[currentIndex + 1];
-          setCurrentTrackAction(nextTrack, true);
+          setCurrentTrackAction(nextTrack, true, true);
         } else {
           set({isPlaying: false, shouldAutoPlay: false}); 
         }
@@ -247,7 +249,7 @@ export const usePlayerStore = create<PlayerState>()(
         const currentIndex = playingAlbum.tracks.findIndex(t => t.file === currentTrack.file);
         if (currentIndex > 0) {
           const prevTrack = playingAlbum.tracks[currentIndex - 1];
-          setCurrentTrackAction(prevTrack, true); 
+          setCurrentTrackAction(prevTrack, true, true);
         }
       },
     }),
