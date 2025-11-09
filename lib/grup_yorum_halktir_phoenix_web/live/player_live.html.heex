@@ -59,13 +59,15 @@
             <.icon name="lucide-arrow-left" class="w-6 h-6 text-neutral-content" />
             Albümlere Dön
           </button>
-          <div class="flex gap-3">
-            <img src={@selected_album.cover_url} alt={@selected_album.title} class="w-20 h-20 object-cover rounded" />
-            <div class="flex-1">
-              <h2 class="text-lg font-bold">{@selected_album.title}</h2>
-              <p class="text-sm text-base-content/70">{@selected_album.year}</p>
+          <%= if @selected_album do %>
+            <div class="flex gap-3">
+              <img src={@selected_album.cover_url} alt={@selected_album.title} class="w-20 h-20 object-cover rounded" />
+              <div class="flex-1">
+                <h2 class="text-lg font-bold">{@selected_album.title}</h2>
+                <p class="text-sm text-base-content/70">{@selected_album.year}</p>
+              </div>
             </div>
-          </div>
+          <% end %>
         </div>
         <div class="flex-1 overflow-y-auto">
           <.tracks_list tracks={@tracks} current_track={@current_track} player_state={@player_state} track_durations={@track_durations} id="tracks-list-mobile" />
