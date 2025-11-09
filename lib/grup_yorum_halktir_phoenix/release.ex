@@ -21,9 +21,15 @@ defmodule GrupYorumHalktirPhoenix.Release do
   def seed do
     load_app()
 
-    # Execute the seeds.exs file
-    seeds_path = Path.join([Application.app_dir(:grup_yorum_halktir_phoenix), "priv/repo/seeds.exs"])
-    Code.eval_file(seeds_path)
+    # Start the repo before seeding
+    for repo <- repos() do
+      {:ok, _, _} = Ecto.Migrator.with_repo(repo, fn _repo ->
+        # Execute the seeds.exs file
+        seeds_path = Path.join([Application.app_dir(:grup_yorum_halktir_phoenix), "priv/repo/seeds.exs"])
+        Code.eval_file(seeds_path)
+        :ok
+      end)
+    end
   end
 
   defp repos do
