@@ -438,10 +438,6 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
     {:noreply, socket}
   end
 
-  defp clamp_volume(volume) when volume < 0.0, do: 0.0
-  defp clamp_volume(volume) when volume > 1.0, do: 1.0
-  defp clamp_volume(volume), do: volume
-
   @impl true
   def handle_event("toggle-shuffle", _params, socket) do
     new_shuffle_state = !socket.assigns.player_state.shuffle_enabled
@@ -617,6 +613,10 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
       {:noreply, update(socket, :player_state, fn state -> %{state | is_playing: false} end)}
     end
   end
+
+  defp clamp_volume(volume) when volume < 0.0, do: 0.0
+  defp clamp_volume(volume) when volume > 1.0, do: 1.0
+  defp clamp_volume(volume), do: volume
 
   def format_time(seconds) when is_float(seconds) or is_integer(seconds) do
     total_seconds = trunc(seconds)
