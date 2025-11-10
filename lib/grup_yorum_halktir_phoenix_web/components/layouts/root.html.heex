@@ -1,12 +1,32 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="csrf-token" content={get_csrf_token()} />
-    <.live_title default="GrupYorumHalktirPhoenix" suffix=" · Phoenix Framework">
+    
+    <%!-- Primary Meta Tags --%>
+    <.live_title default="Grup Yorum Halktır!">
       {assigns[:page_title]}
     </.live_title>
+    <meta name="title" content="Grup Yorum Halktır!" />
+    <meta name="description" content="Grup Yorum'un tüm albümlerine ve şarkılarına özgürce erişin. Sansüre ve erişim engellemelerine karşı direnişin sesi." />
+    <meta name="keywords" content="Grup Yorum, müzik, türkü, direniş, sansür, halk müziği, müzik arşivi" />
+    <meta name="author" content="Grup Yorum Halktır" />
+    
+    <%!-- Open Graph / Facebook --%>
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://grupyorum.mulayim.app/" />
+    <meta property="og:title" content="Grup Yorum Halktır!" />
+    <meta property="og:description" content="Grup Yorum'un tüm albümlerine ve şarkılarına özgürce erişin. Sansüre ve erişim engellemelerine karşı direnişin sesi." />
+    <meta property="og:locale" content="tr_TR" />
+    
+    <%!-- Twitter --%>
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://grupyorum.mulayim.app/" />
+    <meta property="twitter:title" content="Grup Yorum Halktır!" />
+    <meta property="twitter:description" content="Grup Yorum'un tüm albümlerine ve şarkılarına özgürce erişin. Sansüre ve erişim engellemelerine karşı direnişin sesi." />
+    
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
     <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}>
     </script>
