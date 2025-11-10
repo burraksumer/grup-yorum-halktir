@@ -38,6 +38,13 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
       |> Enum.map(fn track -> {track.id, track.duration} end)
       |> Map.new()
 
+    # Restore duration for current track if it exists
+    restored_duration = if current_track do
+      current_track.duration || Map.get(track_durations, current_track.id)
+    else
+      nil
+    end
+
     socket =
       socket
       |> assign(:albums, albums)
@@ -50,7 +57,7 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
         volume: playback_state.volume || 1.0,
         is_playing: playback_state.is_playing || false,
         shuffle_enabled: playback_state.shuffle_enabled || false,
-        duration: nil,
+        duration: restored_duration,
         played_track_ids: []  # Track played songs in this session for better shuffle
       })
       |> assign(:mobile_view, :albums)
@@ -155,6 +162,13 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
     # Merge: existing durations first, database fills gaps
     track_durations = Map.merge(existing_durations, db_durations)
 
+    # Restore duration for current track if it exists
+    restored_duration = if current_track do
+      current_track.duration || Map.get(track_durations, current_track.id)
+    else
+      nil
+    end
+
     socket =
       socket
       |> assign(:session_id, stable_session_id)
@@ -167,7 +181,7 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
         volume: playback_state.volume || socket.assigns.player_state.volume,
         is_playing: false,  # Always reset to false after refresh since we don't autoplay
         shuffle_enabled: playback_state.shuffle_enabled || false,
-        duration: nil,
+        duration: restored_duration,
         played_track_ids: []  # Reset played tracks on session restore
       })
       |> then(fn s ->
@@ -689,7 +703,7 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
             >
               <%= track.title %>
             </p>
-            <div class="hidden sm:block text-xs text-base-content/50 group-hover:text-base-content/60 min-w-[70px] text-right transition-colors" data-track-time={track.id} data-track-id={track.id}>
+            <div class="text-xs text-base-content/50 group-hover:text-base-content/60 min-w-[50px] sm:min-w-[70px] text-right transition-colors shrink-0" data-track-time={track.id} data-track-id={track.id}>
               <%= if @current_track && track.id == @current_track.id do %>
                 <span data-track-current-time={track.id}>
                   <%= format_time(@player_state.position) %>
