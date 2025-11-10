@@ -669,10 +669,10 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
         >
           <div class="w-8 text-center text-sm text-base-content/50 group-hover:text-base-content/70 transition-colors">
             <%= if @current_track && track.id == @current_track.id do %>
-              <.icon name="lucide-music" class={[
-                "w-6 h-6 text-neutral-content mx-auto",
-                if(@player_state.is_playing, do: "animate-pulse", else: "")
-              ]} />
+              <.icon
+                name="lucide-music"
+                class={"w-6 h-6 text-neutral-content mx-auto #{if @player_state.is_playing, do: "animate-pulse", else: ""}"}
+              />
             <% else %>
               <%= track.track_number %>
             <% end %>
