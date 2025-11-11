@@ -505,34 +505,80 @@ const SeekBar = {
 }
 
 // Volume Slider Hook
+// Uses logarithmic curve for better volume control:
+// - Slider value (0-1) is converted to audio volume using quadratic curve
+// - This gives more granular control at lower volumes
+// - Formula: audioVolume = sliderValue^2
+// - Reverse: sliderValue = sqrt(audioVolume)
 const VolumeSlider = {
+  // Convert slider value (0-1) to audio volume (0-1) using quadratic curve
+  sliderToVolume(sliderValue) {
+    // Use quadratic curve: volume increases exponentially
+    // This gives more control at lower volumes
+    return Math.pow(sliderValue, 2)
+  },
+  
+  // Convert audio volume (0-1) back to slider value (0-1)
+  volumeToSlider(audioVolume) {
+    // Reverse of quadratic: take square root
+    return Math.sqrt(audioVolume)
+  },
+  
   mounted() {
     this.findAudio()
     
+    // Set initial slider position from the element's value attribute (set by template)
+    // This ensures correct position on page load
+    const initialSliderValue = parseFloat(this.el.value) || 1.0
+    if (this.audio && initialSliderValue !== undefined && !isNaN(initialSliderValue)) {
+      const audioVolume = this.sliderToVolume(initialSliderValue)
+      this.audio.volume = audioVolume
+    }
+    
     this.el.addEventListener("input", (e) => {
-      const volume = parseFloat(e.target.value)
-      this.updateAudioVolume(volume)
+      const sliderValue = parseFloat(e.target.value)
+      // Convert slider value to actual audio volume
+      const audioVolume = this.sliderToVolume(sliderValue)
+      this.updateAudioVolume(audioVolume)
       // Don't push event immediately - wait for user to release
     })
     
     // Push event only when user releases the slider
     this.el.addEventListener("change", (e) => {
-      const volume = parseFloat(e.target.value)
-      this.pushEvent("volume-change", {volume})
+      const sliderValue = parseFloat(e.target.value)
+      // Send the slider value (0-1) to LiveView, which will store it
+      // When restoring, we'll convert it back to audio volume
+      this.pushEvent("volume-change", {volume: sliderValue})
     })
     
     // Watch for audio element creation
     this.audioObserver = new MutationObserver(() => {
       if (!this.audio || !document.contains(this.audio)) {
         this.findAudio()
+        // When audio element is found, sync volume from slider
+        if (this.audio) {
+          const sliderValue = parseFloat(this.el.value) || 1.0
+          const audioVolume = this.sliderToVolume(sliderValue)
+          this.audio.volume = audioVolume
+        }
       }
     })
     this.audioObserver.observe(document.body, {childList: true, subtree: true})
   },
   updated() {
     this.findAudio()
-    if (this.audio && !this.el.matches(":active")) {
-      this.el.value = this.audio.volume || 1.0
+    // Don't update slider position if user is actively dragging it
+    if (this.el.matches(":active")) {
+      return
+    }
+    
+    // Use the slider value from the template (stored in @player_state.volume)
+    // This is more reliable than reading from audio.volume and converting back
+    const templateSliderValue = parseFloat(this.el.value)
+    if (!isNaN(templateSliderValue) && this.audio) {
+      // Convert slider value to audio volume and apply it
+      const audioVolume = this.sliderToVolume(templateSliderValue)
+      this.audio.volume = audioVolume
     }
   },
   destroyed() {

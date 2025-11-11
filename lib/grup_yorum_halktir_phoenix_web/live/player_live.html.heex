@@ -193,12 +193,13 @@
         </div>
 
     <%!-- Audio Element --%>
+    <%!-- data-volume contains actual audio volume (converted from slider value) --%>
     <audio
       id="audio-player"
       phx-hook="AudioPlayer"
       src={if @current_track, do: @current_track.file_url, else: ""}
       preload="metadata"
-      data-volume={@player_state.volume}
+      data-volume={audio_volume_from_slider(@player_state.volume)}
       data-track-id={if @current_track, do: @current_track.id, else: ""}
     >
     </audio>
