@@ -670,11 +670,12 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
   @impl true
   def handle_event("audio-ended", _params, socket) do
     if socket.assigns.current_track do
+      completed_track = socket.assigns.current_track  # Capture before assigning next track
       played_track_ids = socket.assigns.player_state.played_track_ids || []
 
       next_track =
         Music.get_next_track(
-          socket.assigns.current_track,
+          completed_track,
           socket.assigns.tracks,
           socket.assigns.player_state.shuffle_enabled,
           played_track_ids
@@ -717,13 +718,25 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
         |> push_event("set-src", %{src: next_track.file_url})
         |> push_event("play", %{})
         |> push_event("umami-track", %{
-          eventName: "Track Completed: #{socket.assigns.current_track.title}",
+          eventName: "Track Completed: #{completed_track.title}",
           eventData: %{
-            completed_track_id: socket.assigns.current_track.id,
-            completed_track_title: socket.assigns.current_track.title,
+            completed_track_id: completed_track.id,
+            completed_track_title: completed_track.title,
             next_track_id: next_track.id,
             next_track_title: next_track.title,
             shuffle_enabled: socket.assigns.player_state.shuffle_enabled
+          }
+        })
+        |> push_event("umami-track", %{
+          eventName: "Track Played: #{next_track.title}",
+          eventData: %{
+            track_id: next_track.id,
+            track_title: next_track.title,
+            album_id: next_track.album.id,
+            album_title: next_track.album.title,
+            track_number: next_track.track_number,
+            shuffle_enabled: socket.assigns.player_state.shuffle_enabled,
+            auto_advanced: true
           }
         })
 
