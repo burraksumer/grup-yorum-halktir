@@ -54,12 +54,21 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
       |> assign(:track_durations, track_durations)  # Load from database
       |> assign(:player_state, %{
         position: playback_state.position || 0.0,
-        volume: playback_state.volume || 1.0,
+        volume: playback_state.volume || 1.0,  # Store slider value (0-1)
         is_playing: playback_state.is_playing || false,
         shuffle_enabled: playback_state.shuffle_enabled || false,
         duration: restored_duration,
         played_track_ids: []  # Track played songs in this session for better shuffle
       })
+      |> then(fn s ->
+        # Set initial audio volume by converting slider value
+        if s.assigns.player_state.volume do
+          audio_volume = slider_to_audio_volume(s.assigns.player_state.volume)
+          push_event(s, "set-volume", %{volume: audio_volume})
+        else
+          s
+        end
+      end)
       |> assign(:mobile_view, :albums)
       |> assign(:session_id, session_id)
       |> assign(:initial_session_id, session_id)  # Store initial for JS hook
@@ -187,13 +196,17 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
       |> assign(:track_durations, track_durations)
       |> assign(:player_state, %{
         position: playback_state.position || socket.assigns.player_state.position,
-        volume: playback_state.volume || socket.assigns.player_state.volume,
+        volume: playback_state.volume || socket.assigns.player_state.volume,  # Store slider value (0-1)
         is_playing: false,  # Always reset to false after refresh since we don't autoplay
         shuffle_enabled: playback_state.shuffle_enabled || false,
         duration: restored_duration,
         played_track_ids: []  # Reset played tracks on session restore
       })
       |> then(fn s ->
+        # Convert slider value to audio volume and set it
+        audio_volume = slider_to_audio_volume(s.assigns.player_state.volume)
+        s = push_event(s, "set-volume", %{volume: audio_volume})
+
         # If we have a current track, set the src and seek to saved position
         if current_track do
           saved_position = playback_state.position || 0.0
@@ -501,6 +514,8 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
 
   @impl true
   def handle_event("volume-change", %{"volume" => volume}, socket) do
+    # Volume comes as slider value (0-1), we store it as-is
+    # The JavaScript hook converts it to actual audio volume using quadratic curve
     volume_float =
       case volume do
         vol when is_float(vol) -> vol
@@ -514,12 +529,16 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
       end
       |> clamp_volume()
 
+    # Convert slider value to actual audio volume for the audio element
+    # Using quadratic curve: audioVolume = sliderValue^2
+    audio_volume = :math.pow(volume_float, 2)
+
     socket =
       socket
       |> update(:player_state, fn state -> %{state | volume: volume_float} end)
-      |> push_event("set-volume", %{volume: volume_float})
+      |> push_event("set-volume", %{volume: audio_volume})
 
-    # Save playback state
+    # Save playback state (store slider value, not audio volume)
     Music.update_playback_state(socket.assigns.session_id, %{
       volume: volume_float
     })
@@ -724,6 +743,23 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
   defp clamp_volume(volume) when volume < 0.0, do: 0.0
   defp clamp_volume(volume) when volume > 1.0, do: 1.0
   defp clamp_volume(volume), do: volume
+
+  # Convert slider value (0-1) to actual audio volume using quadratic curve
+  # This gives better control at lower volumes
+  defp slider_to_audio_volume(slider_value) when is_float(slider_value) do
+    :math.pow(slider_value, 2)
+  end
+
+  defp slider_to_audio_volume(slider_value) when is_integer(slider_value) do
+    slider_to_audio_volume(slider_value * 1.0)
+  end
+
+  defp slider_to_audio_volume(_), do: 1.0
+
+  # Helper function for template to convert slider value to audio volume
+  def audio_volume_from_slider(slider_value) do
+    slider_to_audio_volume(slider_value)
+  end
 
   def format_time(seconds) when is_float(seconds) or is_integer(seconds) do
     total_seconds = trunc(seconds)
