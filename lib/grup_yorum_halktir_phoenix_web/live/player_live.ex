@@ -99,6 +99,15 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
         # Reset played tracks when switching albums (fresh start for new album)
         %{state | played_track_ids: []}
       end)
+      |> push_event("umami-track", %{
+        eventName: "Album Selected",
+        eventData: %{
+          album_id: album.id,
+          album_title: album.title,
+          album_year: album.year,
+          track_count: length(tracks)
+        }
+      })
 
     {:noreply, socket}
   end
@@ -230,6 +239,17 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
       end)
       |> push_event("set-src", %{src: track.file_url})
       |> push_event("play", %{})
+      |> push_event("umami-track", %{
+        eventName: "Track Played",
+        eventData: %{
+          track_id: track.id,
+          track_title: track.title,
+          album_id: track.album.id,
+          album_title: track.album.title,
+          track_number: track.track_number,
+          shuffle_enabled: socket.assigns.player_state.shuffle_enabled
+        }
+      })
 
     # Save playback state
     Music.update_playback_state(socket.assigns.session_id, %{
@@ -262,6 +282,15 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
             push_event(s, "pause", %{})
           end
         end)
+        |> push_event("umami-track", %{
+          eventName: "Play/Pause Toggle",
+          eventData: %{
+            action: if(new_playing_state, do: "play", else: "pause"),
+            track_id: socket.assigns.current_track.id,
+            track_title: socket.assigns.current_track.title,
+            position: socket.assigns.player_state.position || 0.0
+          }
+        })
 
       # Save playback state
       Music.update_playback_state(socket.assigns.session_id, %{
@@ -322,6 +351,15 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
         end)
         |> push_event("set-src", %{src: next_track.file_url})
         |> push_event("play", %{})
+        |> push_event("umami-track", %{
+          eventName: "Next Track",
+          eventData: %{
+            previous_track_id: socket.assigns.current_track.id,
+            next_track_id: next_track.id,
+            next_track_title: next_track.title,
+            shuffle_enabled: socket.assigns.player_state.shuffle_enabled
+          }
+        })
 
       # Save playback state
       Music.update_playback_state(socket.assigns.session_id, %{
@@ -385,6 +423,15 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
         end)
         |> push_event("set-src", %{src: previous_track.file_url})
         |> push_event("play", %{})
+        |> push_event("umami-track", %{
+          eventName: "Previous Track",
+          eventData: %{
+            previous_track_id: socket.assigns.current_track.id,
+            next_track_id: previous_track.id,
+            next_track_title: previous_track.title,
+            shuffle_enabled: socket.assigns.player_state.shuffle_enabled
+          }
+        })
 
       # Save playback state
       Music.update_playback_state(socket.assigns.session_id, %{
@@ -462,6 +509,13 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
       |> update(:player_state, fn state ->
         %{state | shuffle_enabled: new_shuffle_state, played_track_ids: []}
       end)
+      |> push_event("umami-track", %{
+        eventName: "Shuffle Toggle",
+        eventData: %{
+          shuffle_enabled: new_shuffle_state,
+          current_track_id: if(socket.assigns.current_track, do: socket.assigns.current_track.id, else: nil)
+        }
+      })
 
     # Save playback state
     Music.update_playback_state(socket.assigns.session_id, %{
@@ -614,6 +668,16 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
         end)
         |> push_event("set-src", %{src: next_track.file_url})
         |> push_event("play", %{})
+        |> push_event("umami-track", %{
+          eventName: "Track Completed",
+          eventData: %{
+            completed_track_id: socket.assigns.current_track.id,
+            completed_track_title: socket.assigns.current_track.title,
+            next_track_id: next_track.id,
+            next_track_title: next_track.title,
+            shuffle_enabled: socket.assigns.player_state.shuffle_enabled
+          }
+        })
 
       # Save playback state
       Music.update_playback_state(socket.assigns.session_id, %{

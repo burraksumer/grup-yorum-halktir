@@ -202,6 +202,9 @@
       data-track-id={if @current_track, do: @current_track.id, else: ""}
     >
     </audio>
+
+    <%!-- Hidden element for Umami tracking hook --%>
+    <div id="umami-track" phx-hook="UmamiTrackingHook" class="hidden"></div>
   </div>
 </Layouts.app>
 

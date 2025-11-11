@@ -25,6 +25,32 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/grup_yorum_halktir_phoenix"
 import topbar from "../vendor/topbar"
 
+// Umami Tracking Hook - listens for push_event from LiveView
+const UmamiTrackingHook = {
+  mounted() {
+    this.handleEvent("umami-track", (payload) => {
+      const { eventName, eventData } = payload || {}
+      if (eventName) {
+        UmamiTracker.track(eventName, eventData || {})
+      }
+    })
+  }
+}
+
+// Umami Tracking Helper
+const UmamiTracker = {
+  track(eventName, eventData = {}) {
+    if (typeof window.umami !== 'undefined' && window.umami.track) {
+      try {
+        window.umami.track(eventName, eventData)
+      } catch (e) {
+        // Silently handle tracking errors
+        console.error("Umami tracking error:", e)
+      }
+    }
+  }
+}
+
 // Session ID Manager - persists across page refreshes
 const SessionManager = {
   getSessionId() {
@@ -762,7 +788,8 @@ const liveSocket = new LiveSocket("/live", Socket, {
     AudioPlayer,
     SeekBar,
     VolumeSlider,
-    TrackListPreloader
+    TrackListPreloader,
+    UmamiTrackingHook
   },
 })
 
