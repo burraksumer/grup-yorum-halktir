@@ -100,7 +100,7 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
         %{state | played_track_ids: []}
       end)
       |> push_event("umami-track", %{
-        eventName: "Album Selected",
+        eventName: "Album Selected: #{album.title}",
         eventData: %{
           album_id: album.id,
           album_title: album.title,
@@ -209,7 +209,18 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
 
   @impl true
   def handle_event("back-to-albums", _params, socket) do
-    {:noreply, assign(socket, :mobile_view, :albums)}
+    socket =
+      socket
+      |> assign(:mobile_view, :albums)
+      |> push_event("umami-track", %{
+        eventName: if(socket.assigns.selected_album, do: "Back to Albums: #{socket.assigns.selected_album.title}", else: "Back to Albums"),
+        eventData: %{
+          album_id: if(socket.assigns.selected_album, do: socket.assigns.selected_album.id, else: nil),
+          album_title: if(socket.assigns.selected_album, do: socket.assigns.selected_album.title, else: nil)
+        }
+      })
+
+    {:noreply, socket}
   end
 
   @impl true
@@ -240,7 +251,7 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
       |> push_event("set-src", %{src: track.file_url})
       |> push_event("play", %{})
       |> push_event("umami-track", %{
-        eventName: "Track Played",
+        eventName: "Track Played: #{track.title}",
         eventData: %{
           track_id: track.id,
           track_title: track.title,
@@ -283,7 +294,7 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
           end
         end)
         |> push_event("umami-track", %{
-          eventName: "Play/Pause Toggle",
+          eventName: "#{if(new_playing_state, do: "Play", else: "Pause")}: #{socket.assigns.current_track.title}",
           eventData: %{
             action: if(new_playing_state, do: "play", else: "pause"),
             track_id: socket.assigns.current_track.id,
@@ -352,9 +363,10 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
         |> push_event("set-src", %{src: next_track.file_url})
         |> push_event("play", %{})
         |> push_event("umami-track", %{
-          eventName: "Next Track",
+          eventName: "Next Track: #{next_track.title}",
           eventData: %{
             previous_track_id: socket.assigns.current_track.id,
+            previous_track_title: socket.assigns.current_track.title,
             next_track_id: next_track.id,
             next_track_title: next_track.title,
             shuffle_enabled: socket.assigns.player_state.shuffle_enabled
@@ -424,9 +436,10 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
         |> push_event("set-src", %{src: previous_track.file_url})
         |> push_event("play", %{})
         |> push_event("umami-track", %{
-          eventName: "Previous Track",
+          eventName: "Previous Track: #{previous_track.title}",
           eventData: %{
             previous_track_id: socket.assigns.current_track.id,
+            previous_track_title: socket.assigns.current_track.title,
             next_track_id: previous_track.id,
             next_track_title: previous_track.title,
             shuffle_enabled: socket.assigns.player_state.shuffle_enabled
@@ -460,6 +473,21 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
       socket
       |> update(:player_state, fn state -> %{state | position: position_float} end)
       |> push_event("seek", %{position: position_float})
+      |> then(fn s ->
+        if s.assigns.current_track do
+          push_event(s, "umami-track", %{
+            eventName: "Seek: #{s.assigns.current_track.title}",
+            eventData: %{
+              track_id: s.assigns.current_track.id,
+              track_title: s.assigns.current_track.title,
+              position: position_float,
+              duration: s.assigns.player_state.duration
+            }
+          })
+        else
+          s
+        end
+      end)
 
     # Save playback state
     if socket.assigns.current_track do
@@ -510,10 +538,11 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
         %{state | shuffle_enabled: new_shuffle_state, played_track_ids: []}
       end)
       |> push_event("umami-track", %{
-        eventName: "Shuffle Toggle",
+        eventName: if(socket.assigns.current_track, do: "Shuffle #{if(new_shuffle_state, do: "On", else: "Off")}: #{socket.assigns.current_track.title}", else: "Shuffle #{if(new_shuffle_state, do: "On", else: "Off")}"),
         eventData: %{
           shuffle_enabled: new_shuffle_state,
-          current_track_id: if(socket.assigns.current_track, do: socket.assigns.current_track.id, else: nil)
+          current_track_id: if(socket.assigns.current_track, do: socket.assigns.current_track.id, else: nil),
+          current_track_title: if(socket.assigns.current_track, do: socket.assigns.current_track.title, else: nil)
         }
       })
 
@@ -669,7 +698,7 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
         |> push_event("set-src", %{src: next_track.file_url})
         |> push_event("play", %{})
         |> push_event("umami-track", %{
-          eventName: "Track Completed",
+          eventName: "Track Completed: #{socket.assigns.current_track.title}",
           eventData: %{
             completed_track_id: socket.assigns.current_track.id,
             completed_track_title: socket.assigns.current_track.title,
