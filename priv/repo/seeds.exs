@@ -13,8 +13,8 @@
 alias GrupYorumHalktirPhoenix.Music
 alias GrupYorumHalktirPhoenix.Repo
 
-# Base URL for Minio
-minio_base_url = "https://minio.mulayim.app/grup-yorum"
+# Base URL for Cloudflare R2
+r2_base_url = "https://grupyorumr2.mulayim.app"
 
 # Read and parse JSON file
 json_path = Path.join([Application.app_dir(:grup_yorum_halktir_phoenix), "priv/static/all_albums_metadata.json"])
@@ -30,7 +30,7 @@ Repo.delete_all(GrupYorumHalktirPhoenix.Music.Album)
 # Process each album
 Enum.each(data["albums"], fn album_data ->
   # Generate cover URL
-  cover_url = "#{minio_base_url}/albums/#{album_data["year"]}-#{album_data["slug"]}/cover.jpg"
+  cover_url = "#{r2_base_url}/albums/#{album_data["year"]}-#{album_data["slug"]}/cover.jpg"
 
   # Create album
   album_attrs = %{
@@ -48,7 +48,7 @@ Enum.each(data["albums"], fn album_data ->
   Enum.each(album_data["tracks"], fn track_data ->
     # Generate track file URL
     file_url =
-      "#{minio_base_url}/albums/#{album_data["year"]}-#{album_data["slug"]}/tracks/#{track_data["file"]}"
+      "#{r2_base_url}/albums/#{album_data["year"]}-#{album_data["slug"]}/tracks/#{track_data["file"]}"
 
     track_attrs = %{
       album_id: album.id,
