@@ -88,6 +88,10 @@ const AudioPlayer = {
 		this.audio = this.el;
 		this.lastSrc = '';
 		this.lastDuration = null;
+		this.retryCount = 0;
+		this.maxRetries = 3;
+		this.stallTimeout = null;
+		this.isRetrying = false;
 
 		// Send stable session ID to LiveView
 		const stableSessionId = SessionManager.getSessionId();
@@ -220,6 +224,14 @@ const AudioPlayer = {
 		});
 		this.handleEvent('set-src', ({ src, position }) => {
 			if (src && src !== '' && src !== this.lastSrc) {
+				// Reset retry state on new track
+				this.retryCount = 0;
+				this.isRetrying = false;
+				if (this.stallTimeout) {
+					clearTimeout(this.stallTimeout);
+					this.stallTimeout = null;
+				}
+
 				this.lastSrc = src;
 				this.lastDuration = null; // Reset lastDuration on new track
 				this.audio.pause();
@@ -420,6 +432,48 @@ const AudioPlayer = {
 			}
 		});
 
+		// Handle stalled requests - force connection reset
+		this.audio.addEventListener('stalled', () => {
+			if (this.isRetrying) return; // Already retrying
+
+			const currentSrc = this.audio.src;
+			if (!currentSrc || currentSrc === '') return;
+
+			// If stalled for more than 2 seconds, reset connection
+			if (this.stallTimeout) {
+				clearTimeout(this.stallTimeout);
+			}
+
+			this.stallTimeout = setTimeout(() => {
+				if (
+					this.audio.networkState === 2 && // LOADING
+					this.audio.readyState < 1 && // No metadata yet
+					this.retryCount < this.maxRetries
+				) {
+					this.resetConnectionAndRetry(currentSrc);
+				}
+			}, 2000); // Wait 2 seconds before resetting
+		});
+
+		// Clear stall timeout when metadata loads successfully
+		this.audio.addEventListener('loadedmetadata', () => {
+			if (this.stallTimeout) {
+				clearTimeout(this.stallTimeout);
+				this.stallTimeout = null;
+			}
+			this.retryCount = 0; // Reset retry count on success
+			this.isRetrying = false;
+		});
+
+		// Handle errors
+		this.audio.addEventListener('error', () => {
+			if (this.stallTimeout) {
+				clearTimeout(this.stallTimeout);
+				this.stallTimeout = null;
+			}
+			this.isRetrying = false;
+		});
+
 		// Sync play/pause state
 		this.handleEvent('sync-playing', ({ is_playing }) => {
 			if (
@@ -444,6 +498,14 @@ const AudioPlayer = {
 				) {
 					const newSrc = this.el.getAttribute('src');
 					if (newSrc && newSrc !== '' && newSrc !== this.lastSrc) {
+						// Reset retry state on new track
+						this.retryCount = 0;
+						this.isRetrying = false;
+						if (this.stallTimeout) {
+							clearTimeout(this.stallTimeout);
+							this.stallTimeout = null;
+						}
+
 						this.lastSrc = newSrc;
 						this.audio.pause();
 						this.audio.src = newSrc;
@@ -475,6 +537,44 @@ const AudioPlayer = {
 			this.lastSrc = initialSrc;
 		}
 	},
+
+	// Reset connection and retry with cache-busting
+	resetConnectionAndRetry(src) {
+		if (this.isRetrying) return;
+		this.isRetrying = true;
+		this.retryCount++;
+
+		// Force connection reset by clearing src and reloading
+		this.audio.pause();
+		this.audio.src = '';
+		this.audio.load();
+
+		// Add cache-busting query param to force new connection
+		const separator = src.includes('?') ? '&' : '?';
+		const retrySrc = `${src}${separator}_retry=${
+			this.retryCount
+		}&_t=${Date.now()}`;
+
+		// Small delay before retrying to let connection close
+		setTimeout(() => {
+			if (!this.audio) {
+				this.isRetrying = false;
+				return;
+			}
+
+			this.audio.src = retrySrc;
+			this.audio.load();
+
+			if (this.el.dataset.volume) {
+				this.audio.volume = parseFloat(this.el.dataset.volume);
+			}
+
+			// Reset retry flag after a delay
+			setTimeout(() => {
+				this.isRetrying = false;
+			}, 5000);
+		}, 100);
+	},
 	updated() {
 		try {
 			if (!this.audio) return;
@@ -490,6 +590,14 @@ const AudioPlayer = {
 				currentSrcAttr !== '' &&
 				currentSrcAttr !== this.lastSrc
 			) {
+				// Reset retry state on new track
+				this.retryCount = 0;
+				this.isRetrying = false;
+				if (this.stallTimeout) {
+					clearTimeout(this.stallTimeout);
+					this.stallTimeout = null;
+				}
+
 				this.lastSrc = currentSrcAttr;
 				this.audio.pause();
 				this.audio.src = currentSrcAttr;
@@ -508,6 +616,9 @@ const AudioPlayer = {
 		}
 		if (this.timeupdateThrottle) {
 			clearTimeout(this.timeupdateThrottle);
+		}
+		if (this.stallTimeout) {
+			clearTimeout(this.stallTimeout);
 		}
 	},
 };
