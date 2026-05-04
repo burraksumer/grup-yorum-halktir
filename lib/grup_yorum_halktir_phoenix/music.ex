@@ -3,7 +3,7 @@ defmodule GrupYorumHalktirPhoenix.Music do
   The Music context for managing albums and tracks.
   """
 
-  import Ecto.Query
+  alias GrupYorumHalktirPhoenix.MusicCache
   alias GrupYorumHalktirPhoenix.Repo
 
   alias GrupYorumHalktirPhoenix.Music.Album
@@ -104,34 +104,26 @@ defmodule GrupYorumHalktirPhoenix.Music do
   # Albums
   #
 
-  def list_albums do
-    Repo.all(from a in Album, order_by: [asc: a.year])
-  end
+  def list_albums, do: MusicCache.list_albums()
 
-  def get_album!(id), do: Repo.get!(Album, id)
+  def get_album!(id), do: MusicCache.get_album!(id)
 
-  def get_album_by_slug!(slug), do: Repo.get_by!(Album, slug: slug)
+  def get_album_by_slug!(slug), do: MusicCache.get_album_by_slug!(slug)
 
   #
   # Tracks
   #
 
-  def list_tracks_by_album(album_id) do
-    Repo.all(
-      from t in Track,
-        where: t.album_id == ^album_id,
-        order_by: [asc: t.disc, asc: t.track_number],
-        preload: :album
-    )
-  end
+  def list_tracks_by_album(album_id), do: MusicCache.list_tracks_by_album(album_id)
 
-  def get_track!(id), do: Repo.get!(Track, id) |> Repo.preload(:album)
+  def get_track!(id), do: MusicCache.get_track!(id)
 
   def update_track_duration(track_id, duration) do
-    track = Repo.get!(Track, track_id)
-    track
-    |> Track.changeset(%{duration: duration})
-    |> Repo.update()
+    with track <- Repo.get!(Track, track_id),
+         {:ok, updated} <- track |> Track.changeset(%{duration: duration}) |> Repo.update() do
+      MusicCache.put_track_duration(track_id, duration)
+      {:ok, updated}
+    end
   end
 
   def get_next_track(current_track, tracks, shuffle_enabled \\ false, played_track_ids \\ []) do

@@ -12,6 +12,7 @@ defmodule GrupYorumHalktirPhoenix.Application do
       GrupYorumHalktirPhoenix.Repo,
       {Ecto.Migrator,
        repos: Application.fetch_env!(:grup_yorum_halktir_phoenix, :ecto_repos), skip: skip_migrations?()},
+      GrupYorumHalktirPhoenix.MusicCache,
       {DNSCluster, query: Application.get_env(:grup_yorum_halktir_phoenix, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: GrupYorumHalktirPhoenix.PubSub},
       # Start a worker by calling: GrupYorumHalktirPhoenix.Worker.start_link(arg)
