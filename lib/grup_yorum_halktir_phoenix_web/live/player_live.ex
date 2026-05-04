@@ -6,72 +6,33 @@ defmodule GrupYorumHalktirPhoenixWeb.PlayerLive do
 
   @impl true
   def mount(_params, _session, socket) do
+    # No DB work here. socket.id is unstable (changes between HTTP mount, WS mount,
+    # and reconnects), so any playback_state lookup keyed on it would create orphan
+    # rows. Real state is loaded by the "set-session-id" handler, which the JS hook
+    # fires immediately after WS connect with a stable ID from localStorage.
     albums = Music.list_albums()
-
-    # Use a stable session ID from the socket's connect_info or generate one
-    # socket.id changes on reconnect, so we'll use a more stable identifier
-    session_id = socket.id  # This will be replaced by JS hook with stable ID
-
-    playback_state = Music.get_or_create_playback_state(session_id)
-
-    # Restore current track if exists
-    current_track = if playback_state.current_track_id do
-      Music.get_track!(playback_state.current_track_id)
-    else
-      nil
-    end
-
-    # If we have a current track, use its album, otherwise use first album
-    selected_album = if current_track do
-      current_track.album
-    else
-      List.first(albums)
-    end
-
+    selected_album = List.first(albums)
     tracks = if selected_album, do: Music.list_tracks_by_album(selected_album.id), else: []
-
-    # Load durations from database immediately (once ANY user discovers them, ALL users see them)
-    # localStorage will merge later for performance, but DB is the source of truth
-    track_durations =
-      tracks
-      |> Enum.filter(fn track -> not is_nil(track.duration) end)
-      |> Enum.map(fn track -> {track.id, track.duration} end)
-      |> Map.new()
-
-    # Restore duration for current track if it exists
-    restored_duration = if current_track do
-      current_track.duration || Map.get(track_durations, current_track.id)
-    else
-      nil
-    end
+    session_id = socket.id
 
     socket =
       socket
       |> assign(:albums, albums)
       |> assign(:selected_album, selected_album)
       |> assign(:tracks, tracks)
-      |> assign(:current_track, current_track)
-      |> assign(:track_durations, track_durations)  # Load from database
+      |> assign(:current_track, nil)
+      |> assign(:track_durations, %{})
       |> assign(:player_state, %{
-        position: playback_state.position || 0.0,
-        volume: playback_state.volume || 1.0,  # Store slider value (0-1)
-        is_playing: playback_state.is_playing || false,
-        shuffle_enabled: playback_state.shuffle_enabled || false,
-        duration: restored_duration,
-        played_track_ids: []  # Track played songs in this session for better shuffle
+        position: 0.0,
+        volume: 1.0,
+        is_playing: false,
+        shuffle_enabled: false,
+        duration: nil,
+        played_track_ids: []
       })
-      |> then(fn s ->
-        # Set initial audio volume by converting slider value
-        if s.assigns.player_state.volume do
-          audio_volume = slider_to_audio_volume(s.assigns.player_state.volume)
-          push_event(s, "set-volume", %{volume: audio_volume})
-        else
-          s
-        end
-      end)
       |> assign(:mobile_view, :albums)
       |> assign(:session_id, session_id)
-      |> assign(:initial_session_id, session_id)  # Store initial for JS hook
+      |> assign(:initial_session_id, session_id)
 
     {:ok, socket}
   end
