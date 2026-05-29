@@ -91,6 +91,10 @@ ENV MIX_ENV="prod"
 # Only copy the final release from the build stage
 COPY --from=builder --chown=nobody:root /app/_build/${MIX_ENV}/rel/grup_yorum_halktir_phoenix ./
 
+# Create a writable directory for the SQLite database. A managed Docker volume
+# mounted here inherits this ownership, so the `nobody` user can open/create the DB.
+RUN mkdir -p /app/data && chown nobody:root /app/data
+
 USER nobody
 
 # If using an environment that doesn't automatically reap zombie processes, it is
