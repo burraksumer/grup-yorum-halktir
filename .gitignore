@@ -39,3 +39,9 @@ npm-debug.log
 *.db
 *.db-*
 
+# macOS metadata files
+.DS_Store
+
+# Superpowers brainstorming/spec artifacts
+/docs/superpowers/
+

@@ -4,33 +4,62 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="csrf-token" content={get_csrf_token()} />
-    
-    <%!-- Primary Meta Tags --%>
-    <.live_title default="Grup Yorum Halktır!">
-      {assigns[:page_title]}
-    </.live_title>
-    <meta name="title" content="Grup Yorum Halktır!" />
-    <meta name="description" content="Grup Yorum'un tüm albümlerine ve şarkılarına özgürce erişin. Sansüre ve erişim engellemelerine karşı direnişin sesi." />
-    <meta name="keywords" content="Grup Yorum, müzik, türkü, direniş, sansür, halk müziği, müzik arşivi" />
+
+    <%!-- Primary Meta Tags (per-page assigns with safe home defaults) --%>
+    <% title = assigns[:page_title] || "Grup Yorum Halktır!" %>
+    <% doc_title =
+      if assigns[:page_title],
+        do: assigns[:page_title] <> " · Grup Yorum Halktır!",
+        else: "Grup Yorum Halktır!" %>
+    <.live_title>{doc_title}</.live_title>
+    <% description =
+      assigns[:meta_description] ||
+        "Grup Yorum'un tüm albümlerine ve şarkılarına özgürce erişin. Sansüre ve erişim engellemelerine karşı direnişin sesi." %>
+    <% canonical = assigns[:canonical_url] || "https://grupyorum.mulayim.app/" %>
+    <% og_image =
+      assigns[:og_image] ||
+        "https://grupyorumr2.mulayim.app/albums/1987-siyrilip-gelen/cover.jpg" %>
+    <% og_type = assigns[:og_type] || "website" %>
+    <meta name="title" content={title} />
+    <meta name="description" content={description} />
+    <meta
+      name="keywords"
+      content="Grup Yorum, müzik, türkü, direniş, sansür, halk müziği, müzik arşivi"
+    />
     <meta name="author" content="Grup Yorum Halktır" />
-    
+    <link rel="canonical" href={canonical} />
+
     <%!-- Open Graph / Facebook --%>
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://grupyorum.mulayim.app/" />
-    <meta property="og:title" content="Grup Yorum Halktır!" />
-    <meta property="og:description" content="Grup Yorum'un tüm albümlerine ve şarkılarına özgürce erişin. Sansüre ve erişim engellemelerine karşı direnişin sesi." />
+    <meta property="og:type" content={og_type} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={og_image} />
     <meta property="og:locale" content="tr_TR" />
-    
+
     <%!-- Twitter --%>
-    <meta property="twitter:card" content="summary_large_image" />
-    <meta property="twitter:url" content="https://grupyorum.mulayim.app/" />
-    <meta property="twitter:title" content="Grup Yorum Halktır!" />
-    <meta property="twitter:description" content="Grup Yorum'un tüm albümlerine ve şarkılarına özgürce erişin. Sansüre ve erişim engellemelerine karşı direnişin sesi." />
-    
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content={canonical} />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={og_image} />
+
+    <%!-- JSON-LD structured data (per-page, nil-safe) --%>
+    <%= if json_ld = assigns[:json_ld] do %>
+      <script type="application/ld+json">
+        <%= Phoenix.HTML.raw(String.replace(Jason.encode!(json_ld), "</", "<\\/")) %>
+      </script>
+    <% end %>
+
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
     <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}>
     </script>
-    <script defer src="https://umami.mulayim.app/script.js" data-website-id="4e92fbeb-17f3-45a7-9f32-438a43927376"></script>
+    <script
+      defer
+      src="https://umami.mulayim.app/script.js"
+      data-website-id="4e92fbeb-17f3-45a7-9f32-438a43927376"
+    >
+    </script>
     <script>
       (() => {
         const setTheme = (theme) => {
