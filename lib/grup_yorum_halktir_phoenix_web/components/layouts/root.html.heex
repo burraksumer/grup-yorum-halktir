@@ -44,6 +44,12 @@
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={og_image} />
 
+    <%!-- Favicons / icons --%>
+    <link rel="icon" href={~p"/favicon.ico"} sizes="32x32" />
+    <link rel="icon" href={~p"/favicon.svg"} type="image/svg+xml" />
+    <link rel="apple-touch-icon" href={~p"/apple-touch-icon.png"} />
+    <meta name="theme-color" content="#b91c1c" />
+
     <%!-- JSON-LD structured data (per-page, nil-safe) --%>
     <%= if json_ld = assigns[:json_ld] do %>
       <script type="application/ld+json">
