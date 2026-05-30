@@ -44,10 +44,13 @@
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={og_image} />
 
-    <%!-- Favicons / icons --%>
-    <link rel="icon" href={~p"/favicon.ico"} sizes="32x32" />
-    <link rel="icon" href={~p"/favicon.svg"} type="image/svg+xml" />
-    <link rel="apple-touch-icon" href={~p"/apple-touch-icon.png"} />
+    <%!-- Favicons / icons. Plain (non-verified) paths on purpose: in prod ~p
+         digests these into root-level /favicon-<hash>.ico, which Plug.Static's
+         exact `only` filter does NOT serve (404). The undigested files are
+         served, and favicons don't need cache-busting. --%>
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#b91c1c" />
 
     <%!-- JSON-LD structured data (per-page, nil-safe) --%>
