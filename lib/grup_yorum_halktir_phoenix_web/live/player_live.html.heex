@@ -7,61 +7,81 @@
         <div class="p-4">
           <h2 class="text-2xl font-bold mb-6">Albümler</h2>
           <div class="space-y-3">
-            <div
+            <.link
               :for={album <- @albums}
-              phx-click="select-album"
-              phx-value-album-id={album.id}
+              patch={~p"/album/#{album.slug}"}
               class={[
-                "card cursor-pointer transition-all hover:bg-base-300 rounded-lg border",
-                if(@selected_album && album.id == @selected_album.id, do: "bg-base-300 border-base-content/20", else: "bg-base-100 border-base-300")
+                "block card cursor-pointer transition-all hover:bg-base-300 rounded-lg border",
+                if(@selected_album && album.id == @selected_album.id,
+                  do: "bg-base-300 border-base-content/20",
+                  else: "bg-base-100 border-base-300"
+                )
               ]}
             >
               <div class="flex gap-3 p-4">
-                <img src={album.cover_url} alt={album.title} class="w-20 h-20 xl:w-24 xl:h-24 object-cover rounded-lg" />
+                <img
+                  src={album.cover_url}
+                  alt={album.title}
+                  loading="lazy"
+                  class="w-20 h-20 xl:w-24 xl:h-24 object-cover rounded-lg"
+                />
                 <div class="flex-1 min-w-0">
                   <h3 class="font-semibold text-sm truncate">{album.title}</h3>
                   <p class="text-xs text-base-content/70">{album.year}</p>
                 </div>
               </div>
-            </div>
+            </.link>
           </div>
         </div>
       </aside>
 
       <%!-- Mobile Albums View --%>
-      <div class={["lg:hidden flex-1 overflow-y-auto", if(@mobile_view == :albums, do: "flex", else: "hidden")]}>
+      <div class={[
+        "lg:hidden flex-1 overflow-y-auto",
+        if(@mobile_view == :albums, do: "flex", else: "hidden")
+      ]}>
         <div class="p-4">
           <h2 class="text-xl font-bold mb-4">Albümler</h2>
           <div class="grid grid-cols-2 gap-4">
-            <div
-              :for={album <- @albums}
-              phx-click="select-album"
-              phx-value-album-id={album.id}
-              class="card cursor-pointer bg-base-100 hover:bg-base-200 transition-all"
+            <.link
+              :for={{album, index} <- Enum.with_index(@albums)}
+              patch={~p"/album/#{album.slug}"}
+              class="block card cursor-pointer bg-base-100 hover:bg-base-200 transition-all"
             >
-              <img src={album.cover_url} alt={album.title} class="w-full aspect-square object-cover rounded-t-lg" />
+              <img
+                src={album.cover_url}
+                alt={album.title}
+                loading={if index == 0, do: "eager", else: "lazy"}
+                class="w-full aspect-square object-cover rounded-t-lg"
+              />
               <div class="p-3">
                 <h3 class="font-semibold text-sm truncate">{album.title}</h3>
                 <p class="text-xs text-base-content/70">{album.year}</p>
               </div>
-            </div>
+            </.link>
           </div>
         </div>
       </div>
 
       <%!-- Mobile Tracks View --%>
-      <div class={["lg:hidden flex-1 overflow-y-auto", if(@mobile_view == :tracks, do: "flex flex-col", else: "hidden")]}>
+      <div class={[
+        "lg:hidden flex-1 overflow-y-auto",
+        if(@mobile_view == :tracks, do: "flex flex-col", else: "hidden")
+      ]}>
         <div class="p-4 border-b border-base-300">
           <button
             phx-click="back-to-albums"
             class="btn btn-ghost btn-sm mb-2"
           >
-            <.icon name="lucide-arrow-left" class="w-6 h-6 text-neutral-content" />
-            Albümlere Dön
+            <.icon name="lucide-arrow-left" class="w-6 h-6 text-neutral-content" /> Albümlere Dön
           </button>
           <%= if @selected_album do %>
             <div class="flex gap-3">
-              <img src={@selected_album.cover_url} alt={@selected_album.title} class="w-20 h-20 object-cover rounded" />
+              <img
+                src={@selected_album.cover_url}
+                alt={@selected_album.title}
+                class="w-20 h-20 object-cover rounded"
+              />
               <div class="flex-1">
                 <h2 class="text-lg font-bold">{@selected_album.title}</h2>
                 <p class="text-sm text-base-content/70">{@selected_album.year}</p>
@@ -70,28 +90,46 @@
           <% end %>
         </div>
         <div class="flex-1 overflow-y-auto">
-          <.tracks_list tracks={@tracks} current_track={@current_track} player_state={@player_state} track_durations={@track_durations} id="tracks-list-mobile" />
+          <.tracks_list
+            tracks={@tracks}
+            current_track={@current_track}
+            player_state={@player_state}
+            track_durations={@track_durations}
+            album_slug={@selected_album && @selected_album.slug}
+            id="tracks-list-mobile"
+          />
         </div>
       </div>
 
       <%!-- Desktop Main Content --%>
       <main class="hidden lg:flex flex-1 flex-col overflow-hidden">
-            <%= if @selected_album do %>
-            <div class="p-6 border-b border-base-300">
-              <div class="flex gap-4">
-                <img src={@selected_album.cover_url} alt={@selected_album.title} class="w-40 h-40 xl:w-48 xl:h-48 object-cover rounded-lg shadow-lg" />
-            <div class="flex-1">
-                  <h1 class="text-4xl font-bold mb-2">{@selected_album.title}</h1>
-                  <p class="text-lg text-base-content/70">{@selected_album.year}</p>
-              <%= if @selected_album.description do %>
-                <p class="text-sm text-base-content/70 mt-2">{@selected_album.description}</p>
-              <% end %>
+        <%= if @selected_album do %>
+          <div class="p-6 border-b border-base-300">
+            <div class="flex gap-4">
+              <img
+                src={@selected_album.cover_url}
+                alt={@selected_album.title}
+                class="w-40 h-40 xl:w-48 xl:h-48 object-cover rounded-lg shadow-lg"
+              />
+              <div class="flex-1">
+                <h1 class="text-4xl font-bold mb-2">{@selected_album.title}</h1>
+                <p class="text-lg text-base-content/70">{@selected_album.year}</p>
+                <%= if @selected_album.description do %>
+                  <p class="text-sm text-base-content/70 mt-2">{@selected_album.description}</p>
+                <% end %>
+              </div>
             </div>
           </div>
-        </div>
-            <% end %>
+        <% end %>
         <div class="flex-1 overflow-y-auto">
-          <.tracks_list tracks={@tracks} current_track={@current_track} player_state={@player_state} track_durations={@track_durations} id="tracks-list-desktop" />
+          <.tracks_list
+            tracks={@tracks}
+            current_track={@current_track}
+            player_state={@player_state}
+            track_durations={@track_durations}
+            album_slug={@selected_album && @selected_album.slug}
+            id="tracks-list-desktop"
+          />
         </div>
       </main>
     </div>
@@ -103,14 +141,22 @@
           <%!-- Current Track Info --%>
           <div class="flex-1 min-w-0 flex items-center gap-2 sm:gap-3 w-full sm:w-auto sm:min-w-[200px] sm:max-w-[300px] shrink-0">
             <%= if @current_track do %>
-              <img src={@current_track.album.cover_url} alt={@current_track.album.title} class="w-12 h-12 sm:w-20 sm:h-20 object-cover rounded" />
+              <img
+                src={@current_track.album.cover_url}
+                alt={@current_track.album.title}
+                class="w-12 h-12 sm:w-20 sm:h-20 object-cover rounded"
+              />
               <div class="flex-1 min-w-0">
                 <p class="font-semibold text-sm sm:text-base truncate">{@current_track.title}</p>
-                <p class="text-xs sm:text-sm text-base-content/70 truncate">{@current_track.album.title}</p>
+                <p class="text-xs sm:text-sm text-base-content/70 truncate">
+                  {@current_track.album.title}
+                </p>
               </div>
             <% else %>
               <div class="flex-1 min-w-0">
-                <p class="text-sm sm:text-base text-base-content/70">Oynatmaya başlamak için seçim yapın.</p>
+                <p class="text-sm sm:text-base text-base-content/70">
+                  Oynatmaya başlamak için seçim yapın.
+                </p>
               </div>
             <% end %>
           </div>
@@ -128,15 +174,15 @@
               >
                 <.icon name="lucide-shuffle" class="w-6 h-6 text-neutral-content" />
               </button>
-              <button 
-                phx-click="previous" 
+              <button
+                phx-click="previous"
                 class="btn btn-ghost btn-sm shrink-0"
                 aria-label="Previous track"
               >
                 <.icon name="lucide-skip-back" class="w-6 h-6 text-neutral-content" />
               </button>
-              <button 
-                phx-click="play-pause" 
+              <button
+                phx-click="play-pause"
                 class="btn btn-circle btn-lg shrink-0 flex items-center justify-center"
                 aria-label={if @player_state.is_playing, do: "Pause", else: "Play"}
               >
@@ -146,53 +192,61 @@
                   <.icon name="lucide-play" class="w-6 h-6 text-neutral-content" />
                 <% end %>
               </button>
-              <button 
-                phx-click="next" 
+              <button
+                phx-click="next"
                 class="btn btn-ghost btn-sm shrink-0"
                 aria-label="Next track"
               >
                 <.icon name="lucide-skip-forward" class="w-6 h-6 text-neutral-content" />
               </button>
             </div>
-                <%!-- Seek Bar --%>
-                <%= if @current_track do %>
-                  <div class="flex items-center gap-2 sm:gap-3 w-full max-w-4xl overflow-visible py-2">
-                    <span class="text-xs sm:text-sm text-base-content/70 w-10 sm:w-14 text-right" data-time-display>
-                      <%= format_time(@player_state.position) %>
-                    </span>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={@player_state.position}
-                      phx-hook="SeekBar"
-                      id="seek-bar"
-                      class="range range-primary range-sm flex-1"
-                    />
-                    <span class="text-xs sm:text-sm text-base-content/70 w-10 sm:w-14" data-duration-display>
-                      <%= if @player_state.duration, do: format_time(@player_state.duration), else: "--:--" %>
-                    </span>
-                  </div>
-                <% end %>
-              </div>
-
-              <%!-- Volume Control --%>
-              <div class="hidden sm:flex items-center gap-3 min-w-[180px] justify-end overflow-visible py-2">
-                <.icon name="lucide-volume-2" class="w-6 h-6 text-neutral-content" />
+            <%!-- Seek Bar --%>
+            <%= if @current_track do %>
+              <div class="flex items-center gap-2 sm:gap-3 w-full max-w-4xl overflow-visible py-2">
+                <span
+                  class="text-xs sm:text-sm text-base-content/70 w-10 sm:w-14 text-right"
+                  data-time-display
+                >
+                  {format_time(@player_state.position)}
+                </span>
                 <input
                   type="range"
                   min="0"
-                  max="1"
-                  step="0.01"
-                  value={@player_state.volume}
-                  phx-hook="VolumeSlider"
-                  id="volume-slider"
-                  class="range range-primary range-sm w-32"
+                  max="100"
+                  value={@player_state.position}
+                  phx-hook="SeekBar"
+                  id="seek-bar"
+                  class="range range-primary range-sm flex-1"
                 />
+                <span
+                  class="text-xs sm:text-sm text-base-content/70 w-10 sm:w-14"
+                  data-duration-display
+                >
+                  {if @player_state.duration,
+                    do: format_time(@player_state.duration),
+                    else: "--:--"}
+                </span>
               </div>
-            </div>
+            <% end %>
+          </div>
+
+          <%!-- Volume Control --%>
+          <div class="hidden sm:flex items-center gap-3 min-w-[180px] justify-end overflow-visible py-2">
+            <.icon name="lucide-volume-2" class="w-6 h-6 text-neutral-content" />
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={@player_state.volume}
+              phx-hook="VolumeSlider"
+              id="volume-slider"
+              class="range range-primary range-sm w-32"
+            />
           </div>
         </div>
+      </div>
+    </div>
 
     <%!-- Audio Element --%>
     <%!-- data-volume contains actual audio volume (converted from slider value) --%>
@@ -210,4 +264,3 @@
     <div id="umami-track" phx-hook="UmamiTrackingHook" class="hidden"></div>
   </div>
 </Layouts.app>
-

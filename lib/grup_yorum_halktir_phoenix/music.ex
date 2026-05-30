@@ -50,6 +50,7 @@ defmodule GrupYorumHalktirPhoenix.Music do
       field :file_url, :string
       field :disc, :integer
       field :duration, :float
+      field :slug, :string, virtual: true
 
       belongs_to :album, GrupYorumHalktirPhoenix.Music.Album
 
@@ -117,6 +118,9 @@ defmodule GrupYorumHalktirPhoenix.Music do
   def list_tracks_by_album(album_id), do: MusicCache.list_tracks_by_album(album_id)
 
   def get_track!(id), do: MusicCache.get_track!(id)
+
+  def get_track_by_slug!(album_slug, track_slug),
+    do: MusicCache.get_track_by_slug!(album_slug, track_slug)
 
   def update_track_duration(track_id, duration) do
     with track <- Repo.get!(Track, track_id),

@@ -17,7 +17,11 @@ defmodule GrupYorumHalktirPhoenixWeb.Router do
   scope "/", GrupYorumHalktirPhoenixWeb do
     pipe_through :browser
 
-    live "/", PlayerLive
+    get "/sitemap.xml", SitemapController, :index
+
+    live "/", PlayerLive, :home
+    live "/album/:slug", PlayerLive, :album
+    live "/album/:slug/:track_slug", PlayerLive, :track
   end
 
   # Other scopes may use custom stacks.

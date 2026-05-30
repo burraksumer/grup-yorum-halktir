@@ -11,6 +11,7 @@ defmodule GrupYorumHalktirPhoenix.MusicCache do
 
   import Ecto.Query
   alias GrupYorumHalktirPhoenix.Repo
+  alias GrupYorumHalktirPhoenix.Slug
   alias GrupYorumHalktirPhoenix.Music.Album
   alias GrupYorumHalktirPhoenix.Music.Track
 
@@ -19,6 +20,7 @@ defmodule GrupYorumHalktirPhoenix.MusicCache do
   @albums_by_slug {__MODULE__, :albums_by_slug}
   @tracks_by_album {__MODULE__, :tracks_by_album}
   @tracks_by_id {__MODULE__, :tracks_by_id}
+  @tracks_by_slug {__MODULE__, :tracks_by_slug}
 
   # Public read API — no GenServer round-trip.
 
@@ -44,6 +46,13 @@ defmodule GrupYorumHalktirPhoenix.MusicCache do
 
   def get_track!(id) do
     case Map.fetch(:persistent_term.get(@tracks_by_id), id) do
+      {:ok, track} -> track
+      :error -> raise Ecto.NoResultsError, queryable: Track
+    end
+  end
+
+  def get_track_by_slug!(album_slug, track_slug) do
+    case Map.fetch(:persistent_term.get(@tracks_by_slug), {album_slug, track_slug}) do
       {:ok, track} -> track
       :error -> raise Ecto.NoResultsError, queryable: Track
     end
@@ -82,8 +91,13 @@ defmodule GrupYorumHalktirPhoenix.MusicCache do
             Enum.map(list, fn t -> if t.id == track_id, do: updated, else: t end)
           end)
 
+        new_by_slug =
+          :persistent_term.get(@tracks_by_slug)
+          |> Map.put({updated.album.slug, updated.slug}, updated)
+
         :persistent_term.put(@tracks_by_id, new_by_id)
         :persistent_term.put(@tracks_by_album, new_by_album)
+        :persistent_term.put(@tracks_by_slug, new_by_slug)
         {:reply, :ok, state}
 
       :error ->
@@ -108,14 +122,36 @@ defmodule GrupYorumHalktirPhoenix.MusicCache do
           order_by: [asc: t.disc, asc: t.track_number],
           preload: :album
       )
+      |> assign_track_slugs()
 
     tracks_by_album = Enum.group_by(tracks, & &1.album_id)
     tracks_by_id = Map.new(tracks, &{&1.id, &1})
+    tracks_by_slug = Map.new(tracks, &{{&1.album.slug, &1.slug}, &1})
 
     :persistent_term.put(@albums, albums)
     :persistent_term.put(@albums_by_id, albums_by_id)
     :persistent_term.put(@albums_by_slug, albums_by_slug)
     :persistent_term.put(@tracks_by_album, tracks_by_album)
     :persistent_term.put(@tracks_by_id, tracks_by_id)
+    :persistent_term.put(@tracks_by_slug, tracks_by_slug)
+  end
+
+  # Assigns the virtual `slug` to every track. Slugs are unique *within an
+  # album*; when two tracks in the same album slugify to the same base slug,
+  # the `-<track_number>` suffix disambiguates them.
+  defp assign_track_slugs(tracks) do
+    base_slug_counts =
+      tracks
+      |> Enum.group_by(& &1.album_id, &Slug.slugify(&1.title))
+      |> Map.new(fn {album_id, base_slugs} ->
+        {album_id, Enum.frequencies(base_slugs)}
+      end)
+
+    Enum.map(tracks, fn track ->
+      base = Slug.slugify(track.title)
+      collides? = Map.get(base_slug_counts[track.album_id], base, 0) > 1
+      slug = if collides?, do: "#{base}-#{track.track_number}", else: base
+      %{track | slug: slug}
+    end)
   end
 end
